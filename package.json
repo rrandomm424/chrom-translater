@@ -1,0 +1,12 @@
+{
+  "name": "web-translator-extension",
+  "version": "1.0.0",
+  "description": "网页翻译 Chrome 扩展插件 - 支持中英互译，自动检测文本，自定义翻译样式",
+  "scripts": {
+    "build": "node scripts/build.js"
+  },
+  "devDependencies": {
+    "adm-zip": "^0.5.10",
+    "jimp": "^0.22.10"
+  }
+}

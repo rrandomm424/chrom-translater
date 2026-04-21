@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>网页翻译助手 - 设置</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="options-container">
+    <header class="options-header">
+      <h1>网页翻译助手</h1>
+      <p class="subtitle">设置页面</p>
+    </header>
+    
+    <main class="options-main">
+      <section class="settings-card">
+        <h2>基本设置</h2>
+        
+        <div class="setting-group">
+          <div class="setting-item">
+            <div class="setting-info">
+              <label for="autoDetect">自动检测语言</label>
+              <p class="setting-desc">自动检测文本的源语言</p>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="autoDetect" checked>
+              <span class="slider"></span>
+            </label>
+          </div>
+          
+          <div class="setting-item">
+            <div class="setting-info">
+              <label for="defaultFrom">默认源语言</label>
+              <p class="setting-desc">选择默认的源语言</p>
+            </div>
+            <select id="defaultFrom">
+              <option value="auto">自动检测</option>
+              <option value="zh">中文</option>
+              <option value="en">English</option>
+            </select>
+          </div>
+          
+          <div class="setting-item">
+            <div class="setting-info">
+              <label for="defaultTo">默认目标语言</label>
+              <p class="setting-desc">选择默认的目标语言</p>
+            </div>
+            <select id="defaultTo">
+              <option value="auto">自动切换</option>
+              <option value="zh">中文</option>
+              <option value="en">English</option>
+            </select>
+          </div>
+        </div>
+      </section>
+      
+      <section class="settings-card">
+        <h2>显示设置</h2>
+        
+        <div class="setting-group">
+          <div class="setting-item">
+            <div class="setting-info">
+              <label for="showOriginal">显示原文</label>
+              <p class="setting-desc">在翻译文本旁边显示原文</p>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="showOriginal" checked>
+              <span class="slider"></span>
+            </label>
+          </div>
+          
+          <div class="setting-item">
+            <div class="setting-info">
+              <label for="translationPosition">翻译位置</label>
+              <p class="setting-desc">翻译文本显示的位置</p>
+            </div>
+            <select id="translationPosition">
+              <option value="below">下方显示</option>
+              <option value="inline">行内显示</option>
+              <option value="above">上方显示</option>
+            </select>
+          </div>
+        </div>
+      </section>
+      
+      <section class="settings-card">
+        <h2>样式设置</h2>
+        
+        <div class="setting-group">
+          <div class="style-options-row">
+            <label class="style-checkbox">
+              <input type="checkbox" id="boldStyle">
+              <span class="checkmark"></span>
+              加粗
+            </label>
+            
+            <label class="style-checkbox">
+              <input type="checkbox" id="underlineStyle">
+              <span class="checkmark"></span>
+              下划线
+            </label>
+          </div>
+          
+          <div class="color-picker-row">
+            <div class="color-picker-item">
+              <label for="backgroundColor">背景色</label>
+              <div class="color-input-wrapper">
+                <input type="color" id="backgroundColor" value="#fff3cd">
+                <span class="color-hex" id="bgHex">#fff3cd</span>
+              </div>
+            </div>
+            
+            <div class="color-picker-item">
+              <label for="textColor">文字色</label>
+              <div class="color-input-wrapper">
+                <input type="color" id="textColor" value="#856404">
+                <span class="color-hex" id="textHex">#856404</span>
+              </div>
+            </div>
+          </div>
+          
+          <div class="slider-item">
+            <div class="slider-header">
+              <label for="opacitySlider">透明度</label>
+              <span class="slider-value" id="opacityValue">100%</span>
+            </div>
+            <input type="range" id="opacitySlider" min="0" max="100" value="100">
+          </div>
+        </div>
+        
+        <div class="preview-section">
+          <h3>预览效果</h3>
+          <div class="preview-box">
+            <div id="previewText" class="preview-content">
+              这是一段示例文本，用于展示翻译样式效果。
+              <br>
+              This is an example text to show the translation style effect.
+            </div>
+          </div>
+        </div>
+      </section>
+      
+      <section class="settings-card">
+        <h2>排除列表</h2>
+        <p class="card-desc">在以下网站中不自动启用翻译功能</p>
+        
+        <div class="setting-group">
+          <div class="domain-input-wrapper">
+            <input type="text" id="newDomain" placeholder="例如: example.com" class="domain-input">
+            <button id="addDomainBtn" class="btn-secondary">添加</button>
+          </div>
+          
+          <div class="domain-list" id="domainList">
+            <p class="empty-list">暂无排除的网站</p>
+          </div>
+        </div>
+      </section>
+      
+      <section class="settings-card">
+        <h2>预设样式</h2>
+        <p class="card-desc">快速选择常用的翻译样式</p>
+        
+        <div class="preset-grid" id="presetGrid">
+          <div class="preset-item" data-preset="yellow">
+            <div class="preset-preview" style="background-color: #fff3cd; color: #856404;"></div>
+            <span>高亮黄</span>
+          </div>
+          <div class="preset-item" data-preset="blue">
+            <div class="preset-preview" style="background-color: #cce5ff; color: #004085;"></div>
+            <span>柔和蓝</span>
+          </div>
+          <div class="preset-item" data-preset="green">
+            <div class="preset-preview" style="background-color: #d4edda; color: #155724;"></div>
+            <span>清新绿</span>
+          </div>
+          <div class="preset-item" data-preset="red">
+            <div class="preset-preview" style="background-color: #f8d7da; color: #721c24;"></div>
+            <span>警示红</span>
+          </div>
+          <div class="preset-item" data-preset="dark">
+            <div class="preset-preview" style="background-color: #343a40; color: #ffffff;"></div>
+            <span>深色</span>
+          </div>
+          <div class="preset-item" data-preset="minimal">
+            <div class="preset-preview" style="background-color: transparent; color: #667eea; border: 1px solid #667eea;"></div>
+            <span>简约</span>
+          </div>
+        </div>
+      </section>
+    </main>
+    
+    <footer class="options-footer">
+      <div class="footer-actions">
+        <button id="resetBtn" class="btn-secondary">恢复默认设置</button>
+        <button id="saveBtn" class="btn-primary">保存设置</button>
+      </div>
+      <p class="version-info">网页翻译助手 v1.0.0</p>
+    </footer>
+  </div>
+  
+  <div id="toast" class="toast">
+    <span id="toastMessage">设置已保存</span>
+  </div>
+  
+  <script src="options.js"></script>
+</body>
+</html>
