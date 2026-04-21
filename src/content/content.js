@@ -20,11 +20,10 @@
   
   let currentSettings = DEFAULT_SETTINGS;
   const TRANSLATION_CACHE = new Map();
-  const TRANSLATED_ELEMENTS = new WeakMap();
+  const TRANSLATION_MAP = new WeakMap();
   const OBSERVER = new MutationObserver(handleMutations);
   const DEBOUNCE_TIMERS = new Map();
-  const PROCESSING_TEXT_NODES = new WeakSet();
-  const PROCESSED_PARENTS = new WeakSet();
+  const PROCESSING_NODES = new WeakSet();
   
   const SKIP_TAGS = new Set([
     'script', 'style', 'noscript', 'textarea', 'input',
@@ -35,6 +34,7 @@
   
   const SKIP_CLASSES = new Set([
     'translator-extension-translation',
+    'translator-extension-wrapper',
     'no-translate',
     'notranslate'
   ]);
@@ -72,9 +72,18 @@
         toggleTranslation();
         sendResponse({ success: true });
       } else if (request.action === 'update-settings') {
+        const oldSettings = { ...currentSettings };
         currentSettings = { ...currentSettings, ...request.settings };
+        
         if (currentSettings.enabled) {
-          refreshTranslations();
+          const styleChanged = JSON.stringify(oldSettings.style) !== JSON.stringify(currentSettings.style);
+          const positionChanged = oldSettings.translationPosition !== currentSettings.translationPosition;
+          
+          if (styleChanged && !positionChanged) {
+            updateAllTranslationStyles();
+          } else {
+            refreshTranslations();
+          }
         } else {
           removeAllTranslations();
         }
@@ -188,14 +197,57 @@
   
   function removeAllTranslations() {
     const translations = document.querySelectorAll('.translator-extension-translation');
-    translations.forEach(el => el.remove());
-    TRANSLATED_ELEMENTS.clear();
-    PROCESSED_PARENTS.clear();
+    const breaks = document.querySelectorAll('.translator-extension-break');
+    
+    translations.forEach(el => {
+      const parent = el.parentElement;
+      if (parent && parent.classList.contains('translator-extension-wrapper')) {
+        const originalText = parent.dataset.originalText;
+        const wrapper = parent;
+        const grandParent = wrapper.parentElement;
+        
+        if (grandParent && originalText) {
+          const textNode = document.createTextNode(originalText);
+          grandParent.insertBefore(textNode, wrapper);
+          wrapper.remove();
+        } else {
+          el.remove();
+        }
+      } else {
+        el.remove();
+      }
+    });
+    
+    breaks.forEach(el => el.remove());
+    
+    TRANSLATION_MAP.clear();
+  }
+  
+  function removeTranslationForNode(originalNode) {
+    const translationInfo = TRANSLATION_MAP.get(originalNode);
+    if (translationInfo) {
+      if (translationInfo.breakElement && translationInfo.breakElement.parentNode) {
+        translationInfo.breakElement.remove();
+      }
+      if (translationInfo.translationElement && translationInfo.translationElement.parentNode) {
+        translationInfo.translationElement.remove();
+      }
+      TRANSLATION_MAP.delete(originalNode);
+    }
   }
   
   function refreshTranslations() {
     removeAllTranslations();
     translatePage();
+  }
+  
+  function updateAllTranslationStyles() {
+    const translations = document.querySelectorAll('.translator-extension-translation');
+    const styleString = generateStyleString(currentSettings.style);
+    
+    translations.forEach(el => {
+      el.style.cssText = styleString;
+    });
   }
   
   async function translatePage() {
@@ -247,6 +299,11 @@
       if (element.classList?.contains(className)) return false;
     }
     
+    const parent = element.parentElement;
+    if (parent && parent.classList?.contains('translator-extension-wrapper')) {
+      return false;
+    }
+    
     const computedStyle = window.getComputedStyle(element);
     if (computedStyle.display === 'none' || 
         computedStyle.visibility === 'hidden' ||
@@ -265,7 +322,15 @@
     const walker = document.createTreeWalker(
       element,
       NodeFilter.SHOW_TEXT,
-      null,
+      {
+        acceptNode: (node) => {
+          const parent = node.parentElement;
+          if (parent && parent.classList?.contains('translator-extension-wrapper')) {
+            return NodeFilter.FILTER_REJECT;
+          }
+          return NodeFilter.FILTER_ACCEPT;
+        }
+      },
       false
     );
     
@@ -329,8 +394,14 @@
   }
   
   async function translateTextNode(element, textNode, text) {
-    if (PROCESSING_TEXT_NODES.has(textNode)) return;
-    PROCESSING_TEXT_NODES.add(textNode);
+    if (PROCESSING_NODES.has(textNode)) return;
+    
+    const existingTranslation = TRANSLATION_MAP.get(textNode);
+    if (existingTranslation) {
+      return;
+    }
+    
+    PROCESSING_NODES.add(textNode);
     
     try {
       const detectedLang = detectLanguage(text);
@@ -341,11 +412,6 @@
       }
       
       if (detectedLang === targetLang) {
-        return;
-      }
-      
-      const existingTranslation = TRANSLATED_ELEMENTS.get(textNode);
-      if (existingTranslation) {
         return;
       }
       
@@ -363,7 +429,7 @@
         insertTranslation(textNode, translatedText);
       }
     } finally {
-      PROCESSING_TEXT_NODES.delete(textNode);
+      PROCESSING_NODES.delete(textNode);
     }
   }
   
@@ -387,32 +453,46 @@
       const parent = textNode.parentElement;
       if (!parent) return;
       
+      const originalText = textNode.textContent;
+      
       const styleString = generateStyleString(currentSettings.style);
+      
       const translationSpan = document.createElement('span');
       translationSpan.className = 'translator-extension-translation';
       translationSpan.style.cssText = styleString;
       translationSpan.textContent = translatedText;
-      translationSpan.dataset.original = textNode.textContent;
       
-      const range = document.createRange();
-      range.selectNodeContents(textNode);
-      
-      const wrapper = document.createElement('span');
-      wrapper.className = 'translator-extension-wrapper';
-      wrapper.style.display = 'inline';
-      
-      const textClone = textNode.cloneNode(true);
-      wrapper.appendChild(textClone);
-      
+      let breakElement = null;
       if (currentSettings.translationPosition === 'below') {
-        wrapper.appendChild(document.createElement('br'));
+        breakElement = document.createElement('br');
+        breakElement.className = 'translator-extension-break';
       }
-      wrapper.appendChild(translationSpan);
       
-      range.deleteContents();
-      range.insertNode(wrapper);
+      const nextSibling = textNode.nextSibling;
       
-      TRANSLATED_ELEMENTS.set(textNode, translationSpan);
+      if (breakElement) {
+        if (nextSibling) {
+          parent.insertBefore(breakElement, nextSibling);
+          parent.insertBefore(translationSpan, nextSibling);
+        } else {
+          parent.appendChild(breakElement);
+          parent.appendChild(translationSpan);
+        }
+      } else {
+        if (nextSibling) {
+          parent.insertBefore(translationSpan, nextSibling);
+        } else {
+          parent.appendChild(translationSpan);
+        }
+      }
+      
+      TRANSLATION_MAP.set(textNode, {
+        translationElement: translationSpan,
+        breakElement: breakElement,
+        translatedText: translatedText,
+        originalText: originalText
+      });
+      
     } catch (e) {
       console.warn('插入翻译失败:', e);
     }
@@ -511,25 +591,25 @@
   }
   
   function generateStyleString(style) {
-    let cssText = '';
+    let cssText = 'display: inline-block; margin: 0 4px; padding: 1px 4px; border-radius: 2px; font-size: inherit; line-height: inherit; vertical-align: baseline;';
     
     if (style.bold) {
-      cssText += 'font-weight: bold; ';
+      cssText += ' font-weight: bold;';
     }
     if (style.underline) {
-      cssText += 'text-decoration: underline; ';
+      cssText += ' text-decoration: underline;';
     }
-    if (style.backgroundColor) {
-      cssText += `background-color: ${style.backgroundColor}; `;
+    if (style.backgroundColor && style.backgroundColor !== 'transparent') {
+      cssText += ` background-color: ${style.backgroundColor};`;
     }
     if (style.textColor) {
-      cssText += `color: ${style.textColor}; `;
+      cssText += ` color: ${style.textColor};`;
     }
     if (style.opacity !== undefined) {
-      cssText += `opacity: ${style.opacity}; `;
+      cssText += ` opacity: ${style.opacity};`;
     }
     
-    return cssText.trim();
+    return cssText;
   }
   
   if (!String.prototype.hashCode) {
