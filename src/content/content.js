@@ -20,10 +20,11 @@
   
   let currentSettings = DEFAULT_SETTINGS;
   const TRANSLATION_CACHE = new Map();
-  const TRANSLATION_MAP = new WeakMap();
+  const TRANSLATION_MAP = new Map();
   const OBSERVER = new MutationObserver(handleMutations);
   const DEBOUNCE_TIMERS = new Map();
   const PROCESSING_NODES = new WeakSet();
+  let isObserving = false;
   
   const SKIP_TAGS = new Set([
     'script', 'style', 'noscript', 'textarea', 'input',
@@ -39,16 +40,21 @@
     'notranslate'
   ]);
   
+  let pageLoadComplete = false;
+  
   init();
   
   async function init() {
     await loadSettings();
     setupMessageListeners();
-    setupMutationObserver();
     
     if (currentSettings.enabled) {
+      setupMutationObserver();
       observePage();
-      setTimeout(translatePage, 1000);
+      setTimeout(() => {
+        pageLoadComplete = true;
+        translatePage();
+      }, 1000);
     }
   }
   
@@ -72,28 +78,17 @@
         toggleTranslation();
         sendResponse({ success: true });
       } else if (request.action === 'update-settings') {
-        const oldSettings = { ...currentSettings };
-        currentSettings = { ...currentSettings, ...request.settings };
-        
-        if (currentSettings.enabled) {
-          const styleChanged = JSON.stringify(oldSettings.style) !== JSON.stringify(currentSettings.style);
-          const positionChanged = oldSettings.translationPosition !== currentSettings.translationPosition;
-          
-          if (styleChanged && !positionChanged) {
-            updateAllTranslationStyles();
-          } else {
-            refreshTranslations();
-          }
-        } else {
-          removeAllTranslations();
-        }
+        handleUpdateSettings(request.settings);
+        sendResponse({ success: true });
+      } else if (request.action === 'update-style-only') {
+        handleUpdateStyleOnly(request.style);
         sendResponse({ success: true });
       } else if (request.action === 'translate-selection') {
         translateSelectedText(request.text);
         sendResponse({ success: true });
       } else if (request.action === 'translate-page') {
-        translatePage();
-        sendResponse({ success: true });
+        const result = translatePage();
+        sendResponse({ success: true, result: result });
       } else if (request.action === 'clear-translations') {
         removeAllTranslations();
         sendResponse({ success: true });
@@ -102,20 +97,58 @@
     });
   }
   
+  function handleUpdateSettings(newSettings) {
+    const oldTranslationPosition = currentSettings.translationPosition;
+    currentSettings = { ...currentSettings, ...newSettings };
+    
+    if (currentSettings.enabled) {
+      if (currentSettings.translationPosition !== oldTranslationPosition) {
+        refreshTranslations();
+      } else {
+        updateAllTranslationStyles();
+      }
+    } else {
+      removeAllTranslations();
+    }
+  }
+  
+  function handleUpdateStyleOnly(newStyle) {
+    currentSettings.style = { ...currentSettings.style, ...newStyle };
+    updateAllTranslationStyles();
+  }
+  
   function setupMutationObserver() {
     OBSERVER.disconnect();
+    isObserving = false;
   }
   
   function observePage() {
+    if (isObserving) return;
+    
     OBSERVER.observe(document.body, {
       childList: true,
       subtree: true,
       characterData: true
     });
+    isObserving = true;
+  }
+  
+  function pauseObserver() {
+    if (isObserving) {
+      OBSERVER.disconnect();
+      isObserving = false;
+    }
+  }
+  
+  function resumeObserver() {
+    if (!isObserving && currentSettings.enabled) {
+      observePage();
+    }
   }
   
   function handleMutations(mutations) {
     if (!currentSettings.enabled) return;
+    if (!pageLoadComplete) return;
     
     const timerKey = 'mutation-debounce';
     if (DEBOUNCE_TIMERS.has(timerKey)) {
@@ -129,7 +162,9 @@
         if (mutation.type === 'childList') {
           for (const node of mutation.addedNodes) {
             if (node.nodeType === Node.ELEMENT_NODE) {
-              collectTranslatableElements(node, changedElements);
+              if (!node.classList || !node.classList.contains('translator-extension-translation')) {
+                collectTranslatableElements(node, changedElements);
+              }
             }
           }
         } else if (mutation.type === 'characterData') {
@@ -143,7 +178,7 @@
       for (const element of changedElements) {
         debounceTranslateElement(element);
       }
-    }, 500));
+    }, 800));
   }
   
   function collectTranslatableElements(root, resultSet) {
@@ -173,14 +208,25 @@
   }
   
   function debounceTranslateElement(element) {
-    const timerKey = `element-${element.hashCode ? element.hashCode() : Math.random()}`;
+    const timerKey = `element-${getElementId(element)}`;
     if (DEBOUNCE_TIMERS.has(timerKey)) {
       clearTimeout(DEBOUNCE_TIMERS.get(timerKey));
     }
     
     DEBOUNCE_TIMERS.set(timerKey, setTimeout(() => {
       translateElement(element);
-    }, 300));
+    }, 500));
+  }
+  
+  function getElementId(element) {
+    if (element.id) return element.id;
+    if (element.dataset && element.dataset.translatorId) return element.dataset.translatorId;
+    
+    const id = 'translator-' + Math.random().toString(36).substr(2, 9);
+    if (element.dataset) {
+      element.dataset.translatorId = id;
+    }
+    return id;
   }
   
   function toggleTranslation() {
@@ -190,41 +236,30 @@
       observePage();
       translatePage();
     } else {
-      OBSERVER.disconnect();
+      pauseObserver();
       removeAllTranslations();
     }
   }
   
   function removeAllTranslations() {
+    pauseObserver();
+    
     const translations = document.querySelectorAll('.translator-extension-translation');
     const breaks = document.querySelectorAll('.translator-extension-break');
     
     translations.forEach(el => {
-      const parent = el.parentElement;
-      if (parent && parent.classList.contains('translator-extension-wrapper')) {
-        const originalText = parent.dataset.originalText;
-        const wrapper = parent;
-        const grandParent = wrapper.parentElement;
-        
-        if (grandParent && originalText) {
-          const textNode = document.createTextNode(originalText);
-          grandParent.insertBefore(textNode, wrapper);
-          wrapper.remove();
-        } else {
-          el.remove();
-        }
-      } else {
-        el.remove();
-      }
+      el.remove();
     });
     
     breaks.forEach(el => el.remove());
     
     TRANSLATION_MAP.clear();
+    
+    resumeObserver();
   }
   
-  function removeTranslationForNode(originalNode) {
-    const translationInfo = TRANSLATION_MAP.get(originalNode);
+  function removeTranslationById(nodeId) {
+    const translationInfo = TRANSLATION_MAP.get(nodeId);
     if (translationInfo) {
       if (translationInfo.breakElement && translationInfo.breakElement.parentNode) {
         translationInfo.breakElement.remove();
@@ -232,7 +267,7 @@
       if (translationInfo.translationElement && translationInfo.translationElement.parentNode) {
         translationInfo.translationElement.remove();
       }
-      TRANSLATION_MAP.delete(originalNode);
+      TRANSLATION_MAP.delete(nodeId);
     }
   }
   
@@ -250,8 +285,8 @@
     });
   }
   
-  async function translatePage() {
-    if (!currentSettings.enabled) return;
+  function translatePage() {
+    if (!currentSettings.enabled) return false;
     
     const elements = collectPageElements();
     const batch = [];
@@ -266,6 +301,12 @@
       }
     }
     
+    processTranslationBatch(batch);
+    
+    return true;
+  }
+  
+  async function processTranslationBatch(batch) {
     for (const item of batch) {
       await translateTextNode(item.element, item.textNode, item.text);
     }
@@ -273,7 +314,7 @@
   
   function collectPageElements() {
     const elements = [];
-    const selector = 'p, h1, h2, h3, h4, h5, h6, li, td, th, span, div:not([class*="translator"])';
+    const selector = 'p, h1, h2, h3, h4, h5, h6, li, td, th, span, div';
     
     try {
       const candidates = document.querySelectorAll(selector);
@@ -295,12 +336,14 @@
     const tagName = element.tagName?.toLowerCase();
     if (SKIP_TAGS.has(tagName)) return false;
     
-    for (const className of SKIP_CLASSES) {
-      if (element.classList?.contains(className)) return false;
+    if (element.classList) {
+      for (const className of SKIP_CLASSES) {
+        if (element.classList.contains(className)) return false;
+      }
     }
     
     const parent = element.parentElement;
-    if (parent && parent.classList?.contains('translator-extension-wrapper')) {
+    if (parent && parent.classList && parent.classList.contains('translator-extension-wrapper')) {
       return false;
     }
     
@@ -325,7 +368,7 @@
       {
         acceptNode: (node) => {
           const parent = node.parentElement;
-          if (parent && parent.classList?.contains('translator-extension-wrapper')) {
+          if (parent && parent.classList && parent.classList.contains('translator-extension-translation')) {
             return NodeFilter.FILTER_REJECT;
           }
           return NodeFilter.FILTER_ACCEPT;
@@ -396,7 +439,8 @@
   async function translateTextNode(element, textNode, text) {
     if (PROCESSING_NODES.has(textNode)) return;
     
-    const existingTranslation = TRANSLATION_MAP.get(textNode);
+    const nodeId = getTextNodeId(textNode);
+    const existingTranslation = TRANSLATION_MAP.get(nodeId);
     if (existingTranslation) {
       return;
     }
@@ -426,11 +470,28 @@
       }
       
       if (translatedText && translatedText !== text) {
-        insertTranslation(textNode, translatedText);
+        insertTranslation(textNode, nodeId, translatedText);
       }
     } finally {
       PROCESSING_NODES.delete(textNode);
     }
+  }
+  
+  function getTextNodeId(textNode) {
+    const parent = textNode.parentElement;
+    if (!parent) return 'node-' + Math.random().toString(36).substr(2, 9);
+    
+    let index = 0;
+    const childNodes = parent.childNodes;
+    for (let i = 0; i < childNodes.length; i++) {
+      if (childNodes[i] === textNode) {
+        index = i;
+        break;
+      }
+    }
+    
+    const parentId = getElementId(parent);
+    return `${parentId}-text-${index}`;
   }
   
   async function sendTranslationRequest(text, from, to) {
@@ -448,12 +509,10 @@
     });
   }
   
-  function insertTranslation(textNode, translatedText) {
+  function insertTranslation(textNode, nodeId, translatedText) {
     try {
       const parent = textNode.parentElement;
       if (!parent) return;
-      
-      const originalText = textNode.textContent;
       
       const styleString = generateStyleString(currentSettings.style);
       
@@ -461,14 +520,18 @@
       translationSpan.className = 'translator-extension-translation';
       translationSpan.style.cssText = styleString;
       translationSpan.textContent = translatedText;
+      translationSpan.dataset.nodeId = nodeId;
       
       let breakElement = null;
       if (currentSettings.translationPosition === 'below') {
         breakElement = document.createElement('br');
         breakElement.className = 'translator-extension-break';
+        breakElement.dataset.nodeId = nodeId;
       }
       
       const nextSibling = textNode.nextSibling;
+      
+      pauseObserver();
       
       if (breakElement) {
         if (nextSibling) {
@@ -486,15 +549,18 @@
         }
       }
       
-      TRANSLATION_MAP.set(textNode, {
+      TRANSLATION_MAP.set(nodeId, {
         translationElement: translationSpan,
         breakElement: breakElement,
         translatedText: translatedText,
-        originalText: originalText
+        originalText: textNode.textContent
       });
+      
+      resumeObserver();
       
     } catch (e) {
       console.warn('插入翻译失败:', e);
+      resumeObserver();
     }
   }
   
