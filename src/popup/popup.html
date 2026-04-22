@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>网页翻译助手</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup-container">
+    <header class="popup-header">
+      <h1>网页翻译助手</h1>
+      <div class="toggle-switch">
+        <label class="switch">
+          <input type="checkbox" id="enableToggle" checked>
+          <span class="slider"></span>
+        </label>
+        <span id="statusText">已启用</span>
+      </div>
+    </header>
+    
+    <main class="popup-main">
+      <section class="settings-section">
+        <h2>翻译设置</h2>
+        
+        <div class="setting-item">
+          <label for="targetLanguage">目标语言:</label>
+          <select id="targetLanguage">
+            <option value="auto">自动检测</option>
+            <option value="zh">中文</option>
+            <option value="en">English</option>
+          </select>
+        </div>
+        
+        <div class="setting-item">
+          <label for="translationPosition">翻译位置:</label>
+          <select id="translationPosition">
+            <option value="below">下方显示</option>
+            <option value="inline">行内显示</option>
+          </select>
+        </div>
+      </section>
+      
+      <section class="style-section">
+        <h2>显示样式</h2>
+        
+        <div class="style-options">
+          <label class="style-checkbox">
+            <input type="checkbox" id="boldStyle">
+            <span class="checkmark"></span>
+            加粗
+          </label>
+          
+          <label class="style-checkbox">
+            <input type="checkbox" id="underlineStyle">
+            <span class="checkmark"></span>
+            下划线
+          </label>
+        </div>
+        
+        <div class="color-pickers">
+          <div class="color-item">
+            <label for="backgroundColor">背景色:</label>
+            <input type="color" id="backgroundColor" value="#fff3cd">
+            <span class="color-preview" id="bgPreview"></span>
+          </div>
+          
+          <div class="color-item">
+            <label for="textColor">文字色:</label>
+            <input type="color" id="textColor" value="#856404">
+            <span class="color-preview" id="textPreview"></span>
+          </div>
+        </div>
+        
+        <div class="opacity-slider">
+          <label for="opacitySlider">透明度: <span id="opacityValue">100%</span></label>
+          <input type="range" id="opacitySlider" min="0" max="100" value="100">
+        </div>
+        
+        <div class="preview-box">
+          <h3>预览效果</h3>
+          <div id="previewText" class="preview-content">
+            这是一段示例文本，用于展示翻译样式效果。
+          </div>
+        </div>
+      </section>
+      
+      <section class="quick-actions">
+        <h2>快捷操作</h2>
+        <div class="action-buttons">
+          <button id="translatePageBtn" class="action-btn primary">
+            翻译当前页面
+          </button>
+          <button id="clearTranslationsBtn" class="action-btn secondary">
+            清除翻译
+          </button>
+        </div>
+      </section>
+    </main>
+    
+    <footer class="popup-footer">
+      <a href="#" id="openOptions">更多设置</a>
+      <span class="version">v1.0.0</span>
+    </footer>
+  </div>
+  
+  <script src="popup.js"></script>
+</body>
+</html>

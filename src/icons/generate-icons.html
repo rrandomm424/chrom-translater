@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>生成图标 PNG</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 40px 20px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+    }
+    .container {
+      background: white;
+      border-radius: 16px;
+      padding: 40px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+    }
+    h1 {
+      text-align: center;
+      color: #333;
+      margin-bottom: 10px;
+    }
+    .subtitle {
+      text-align: center;
+      color: #666;
+      margin-bottom: 40px;
+    }
+    .icons-grid {
+      display: flex;
+      justify-content: center;
+      gap: 40px;
+      margin-bottom: 40px;
+    }
+    .icon-item {
+      text-align: center;
+    }
+    .icon-preview {
+      border: 2px dashed #ddd;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 15px;
+      background: #f9f9f9;
+    }
+    canvas {
+      display: block;
+      margin: 0 auto;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    .icon-size {
+      font-size: 14px;
+      color: #888;
+      margin-bottom: 10px;
+    }
+    .download-btn {
+      display: inline-block;
+      padding: 12px 24px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      text-decoration: none;
+      border-radius: 8px;
+      font-weight: 500;
+      transition: all 0.3s ease;
+      border: none;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    .download-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
+    .download-all-btn {
+      display: block;
+      width: 100%;
+      max-width: 300px;
+      margin: 0 auto;
+      padding: 16px 32px;
+      background: linear-gradient(135deg, #27ae60 0%, #2ecc71 100%);
+      color: white;
+      border: none;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+    .download-all-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 16px rgba(39, 174, 96, 0.4);
+    }
+    .instructions {
+      margin-top: 40px;
+      padding: 20px;
+      background: #f8f9fa;
+      border-radius: 10px;
+    }
+    .instructions h3 {
+      color: #333;
+      margin-bottom: 15px;
+    }
+    .instructions ol {
+      color: #555;
+      line-height: 1.8;
+      padding-left: 20px;
+    }
+    .instructions li {
+      margin-bottom: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>生成扩展图标</h1>
+    <p class="subtitle">点击按钮下载 PNG 格式的图标文件</p>
+    
+    <div class="icons-grid">
+      <div class="icon-item">
+        <div class="icon-preview">
+          <canvas id="canvas16" width="16" height="16"></canvas>
+        </div>
+        <div class="icon-size">16 x 16 像素</div>
+        <button class="download-btn" onclick="downloadIcon(16)">下载 icon16.png</button>
+      </div>
+      
+      <div class="icon-item">
+        <div class="icon-preview">
+          <canvas id="canvas48" width="48" height="48" style="width: 96px; height: 96px;"></canvas>
+        </div>
+        <div class="icon-size">48 x 48 像素</div>
+        <button class="download-btn" onclick="downloadIcon(48)">下载 icon48.png</button>
+      </div>
+      
+      <div class="icon-item">
+        <div class="icon-preview">
+          <canvas id="canvas128" width="128" height="128" style="width: 128px; height: 128px;"></canvas>
+        </div>
+        <div class="icon-size">128 x 128 像素</div>
+        <button class="download-btn" onclick="downloadIcon(128)">下载 icon128.png</button>
+      </div>
+    </div>
+    
+    <button class="download-all-btn" onclick="downloadAll()">下载全部图标</button>
+    
+    <div class="instructions">
+      <h3>使用说明</h3>
+      <ol>
+        <li>点击上方按钮下载 PNG 图标文件</li>
+        <li>将下载的图标文件保存到 <code>src/icons/</code> 目录下</li>
+        <li>确保文件名分别为: <code>icon16.png</code>、<code>icon48.png</code>、<code>icon128.png</code></li>
+        <li>然后运行 <code>npm run build</code> 构建扩展</li>
+      </ol>
+    </div>
+  </div>
+
+  <script>
+    function drawIcon(canvas, size) {
+      const ctx = canvas.getContext('2d');
+      const halfSize = size / 2;
+      const radius = size * 0.15;
+      
+      const gradient = ctx.createLinearGradient(0, 0, size, size);
+      gradient.addColorStop(0, '#667eea');
+      gradient.addColorStop(1, '#764ba2');
+      
+      ctx.beginPath();
+      ctx.moveTo(radius, 0);
+      ctx.lineTo(size - radius, 0);
+      ctx.quadraticCurveTo(size, 0, size, radius);
+      ctx.lineTo(size, size - radius);
+      ctx.quadraticCurveTo(size, size, size - radius, size);
+      ctx.lineTo(radius, size);
+      ctx.quadraticCurveTo(0, size, 0, size - radius);
+      ctx.lineTo(0, radius);
+      ctx.quadraticCurveTo(0, 0, radius, 0);
+      ctx.closePath();
+      
+      ctx.fillStyle = gradient;
+      ctx.fill();
+      
+      ctx.fillStyle = 'white';
+      ctx.font = `bold ${size * 0.4}px Arial, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('译', halfSize, halfSize + size * 0.05);
+    }
+    
+    function downloadIcon(size) {
+      const canvas = document.getElementById('canvas' + size);
+      const link = document.createElement('a');
+      link.download = 'icon' + size + '.png';
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    }
+    
+    function downloadAll() {
+      setTimeout(() => downloadIcon(16), 0);
+      setTimeout(() => downloadIcon(48), 300);
+      setTimeout(() => downloadIcon(128), 600);
+    }
+    
+    window.onload = function() {
+      drawIcon(document.getElementById('canvas16'), 16);
+      drawIcon(document.getElementById('canvas48'), 48);
+      drawIcon(document.getElementById('canvas128'), 128);
+    };
+  </script>
+</body>
+</html>
