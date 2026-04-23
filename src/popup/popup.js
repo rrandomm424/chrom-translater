@@ -19,10 +19,15 @@
   };
   
   let currentSettings = DEFAULT_SETTINGS;
+  let debounceTimer = null;
+  let isInitialized = false;
   
   document.addEventListener('DOMContentLoaded', init);
   
   async function init() {
+    if (isInitialized) return;
+    isInitialized = true;
+    
     await loadSettings();
     setupEventListeners();
     updateUIFromSettings();
@@ -45,77 +50,136 @@
   
   function setupEventListeners() {
     const enableToggle = document.getElementById('enableToggle');
-    enableToggle.addEventListener('change', handleToggleChange);
+    if (enableToggle) {
+      enableToggle.removeEventListener('change', handleToggleChange);
+      enableToggle.addEventListener('change', handleToggleChange);
+    }
     
     const targetLanguage = document.getElementById('targetLanguage');
-    targetLanguage.addEventListener('change', handleLanguageChange);
+    if (targetLanguage) {
+      targetLanguage.removeEventListener('change', handleLanguageChange);
+      targetLanguage.addEventListener('change', handleLanguageChange);
+    }
     
     const translationPosition = document.getElementById('translationPosition');
-    translationPosition.addEventListener('change', handlePositionChange);
+    if (translationPosition) {
+      translationPosition.removeEventListener('change', handlePositionChange);
+      translationPosition.addEventListener('change', handlePositionChange);
+    }
     
     const boldStyle = document.getElementById('boldStyle');
-    boldStyle.addEventListener('change', handleStyleChange);
+    if (boldStyle) {
+      boldStyle.removeEventListener('change', handleStyleChange);
+      boldStyle.addEventListener('change', handleStyleChange);
+    }
     
     const underlineStyle = document.getElementById('underlineStyle');
-    underlineStyle.addEventListener('change', handleStyleChange);
+    if (underlineStyle) {
+      underlineStyle.removeEventListener('change', handleStyleChange);
+      underlineStyle.addEventListener('change', handleStyleChange);
+    }
     
     const backgroundColor = document.getElementById('backgroundColor');
-    backgroundColor.addEventListener('input', handleColorChange);
+    if (backgroundColor) {
+      backgroundColor.removeEventListener('input', handleColorInput);
+      backgroundColor.removeEventListener('change', handleColorChange);
+      backgroundColor.addEventListener('input', handleColorInput);
+      backgroundColor.addEventListener('change', handleColorChange);
+    }
     
     const textColor = document.getElementById('textColor');
-    textColor.addEventListener('input', handleColorChange);
+    if (textColor) {
+      textColor.removeEventListener('input', handleColorInput);
+      textColor.removeEventListener('change', handleColorChange);
+      textColor.addEventListener('input', handleColorInput);
+      textColor.addEventListener('change', handleColorChange);
+    }
     
     const opacitySlider = document.getElementById('opacitySlider');
-    opacitySlider.addEventListener('input', handleOpacityChange);
+    if (opacitySlider) {
+      opacitySlider.removeEventListener('input', handleOpacityInput);
+      opacitySlider.removeEventListener('change', handleOpacityChange);
+      opacitySlider.addEventListener('input', handleOpacityInput);
+      opacitySlider.addEventListener('change', handleOpacityChange);
+    }
     
     const translatePageBtn = document.getElementById('translatePageBtn');
-    translatePageBtn.addEventListener('click', handleTranslatePage);
+    if (translatePageBtn) {
+      translatePageBtn.removeEventListener('click', handleTranslatePage);
+      translatePageBtn.addEventListener('click', handleTranslatePage);
+    }
     
     const clearTranslationsBtn = document.getElementById('clearTranslationsBtn');
-    clearTranslationsBtn.addEventListener('click', handleClearTranslations);
+    if (clearTranslationsBtn) {
+      clearTranslationsBtn.removeEventListener('click', handleClearTranslations);
+      clearTranslationsBtn.addEventListener('click', handleClearTranslations);
+    }
     
     const openOptions = document.getElementById('openOptions');
-    openOptions.addEventListener('click', handleOpenOptions);
+    if (openOptions) {
+      openOptions.removeEventListener('click', handleOpenOptions);
+      openOptions.addEventListener('click', handleOpenOptions);
+    }
   }
   
   function updateUIFromSettings() {
     const enableToggle = document.getElementById('enableToggle');
     const statusText = document.getElementById('statusText');
-    enableToggle.checked = currentSettings.enabled;
-    statusText.textContent = currentSettings.enabled ? '已启用' : '已禁用';
+    if (enableToggle && statusText) {
+      enableToggle.checked = currentSettings.enabled;
+      statusText.textContent = currentSettings.enabled ? '已启用' : '已禁用';
+    }
     
     const targetLanguage = document.getElementById('targetLanguage');
-    targetLanguage.value = currentSettings.defaultTo;
+    if (targetLanguage) {
+      targetLanguage.value = currentSettings.defaultTo;
+    }
     
     const translationPosition = document.getElementById('translationPosition');
-    translationPosition.value = currentSettings.translationPosition;
+    if (translationPosition) {
+      translationPosition.value = currentSettings.translationPosition;
+    }
     
     const boldStyle = document.getElementById('boldStyle');
-    boldStyle.checked = currentSettings.style.bold;
+    if (boldStyle) {
+      boldStyle.checked = currentSettings.style.bold;
+    }
     
     const underlineStyle = document.getElementById('underlineStyle');
-    underlineStyle.checked = currentSettings.style.underline;
+    if (underlineStyle) {
+      underlineStyle.checked = currentSettings.style.underline;
+    }
     
     const backgroundColor = document.getElementById('backgroundColor');
-    backgroundColor.value = currentSettings.style.backgroundColor;
-    
     const bgPreview = document.getElementById('bgPreview');
-    bgPreview.style.backgroundColor = currentSettings.style.backgroundColor;
+    if (backgroundColor) {
+      backgroundColor.value = currentSettings.style.backgroundColor;
+    }
+    if (bgPreview) {
+      bgPreview.style.backgroundColor = currentSettings.style.backgroundColor;
+    }
     
     const textColor = document.getElementById('textColor');
-    textColor.value = currentSettings.style.textColor;
-    
     const textPreview = document.getElementById('textPreview');
-    textPreview.style.backgroundColor = currentSettings.style.textColor;
+    if (textColor) {
+      textColor.value = currentSettings.style.textColor;
+    }
+    if (textPreview) {
+      textPreview.style.backgroundColor = currentSettings.style.textColor;
+    }
     
     const opacitySlider = document.getElementById('opacitySlider');
     const opacityValue = document.getElementById('opacityValue');
-    opacitySlider.value = Math.round(currentSettings.style.opacity * 100);
-    opacityValue.textContent = `${Math.round(currentSettings.style.opacity * 100)}%`;
+    if (opacitySlider && opacityValue) {
+      opacitySlider.value = Math.round(currentSettings.style.opacity * 100);
+      opacityValue.textContent = `${Math.round(currentSettings.style.opacity * 100)}%`;
+    }
   }
   
   function updatePreview() {
     const previewText = document.getElementById('previewText');
+    if (!previewText) return;
+    
     const style = currentSettings.style;
     
     let cssText = '';
@@ -142,7 +206,9 @@
   async function handleToggleChange(event) {
     const isEnabled = event.target.checked;
     const statusText = document.getElementById('statusText');
-    statusText.textContent = isEnabled ? '已启用' : '已禁用';
+    if (statusText) {
+      statusText.textContent = isEnabled ? '已启用' : '已禁用';
+    }
     
     currentSettings.enabled = isEnabled;
     await saveSettings();
@@ -172,67 +238,93 @@
     const boldStyle = document.getElementById('boldStyle');
     const underlineStyle = document.getElementById('underlineStyle');
     
-    currentSettings.style.bold = boldStyle.checked;
-    currentSettings.style.underline = underlineStyle.checked;
+    if (boldStyle) {
+      currentSettings.style.bold = boldStyle.checked;
+    }
+    if (underlineStyle) {
+      currentSettings.style.underline = underlineStyle.checked;
+    }
     
     updatePreview();
     await saveSettings();
     sendMessageToContentScript({ 
-      action: 'update-settings', 
-      settings: currentSettings 
+      action: 'update-style-only', 
+      style: currentSettings.style 
     });
   }
   
-  async function handleColorChange(event) {
+  function handleColorInput(event) {
     const targetId = event.target.id;
     const value = event.target.value;
     
     if (targetId === 'backgroundColor') {
       currentSettings.style.backgroundColor = value;
       const bgPreview = document.getElementById('bgPreview');
-      bgPreview.style.backgroundColor = value;
+      if (bgPreview) {
+        bgPreview.style.backgroundColor = value;
+      }
     } else if (targetId === 'textColor') {
       currentSettings.style.textColor = value;
       const textPreview = document.getElementById('textPreview');
-      textPreview.style.backgroundColor = value;
+      if (textPreview) {
+        textPreview.style.backgroundColor = value;
+      }
     }
     
     updatePreview();
+  }
+  
+  async function handleColorChange(event) {
     await saveSettings();
     sendMessageToContentScript({ 
-      action: 'update-settings', 
-      settings: currentSettings 
+      action: 'update-style-only', 
+      style: currentSettings.style 
     });
   }
   
-  async function handleOpacityChange(event) {
+  function handleOpacityInput(event) {
     const value = parseInt(event.target.value) / 100;
     const opacityValue = document.getElementById('opacityValue');
     
     currentSettings.style.opacity = value;
-    opacityValue.textContent = `${event.target.value}%`;
+    if (opacityValue) {
+      opacityValue.textContent = `${event.target.value}%`;
+    }
     
     updatePreview();
+  }
+  
+  async function handleOpacityChange(event) {
     await saveSettings();
     sendMessageToContentScript({ 
-      action: 'update-settings', 
-      settings: currentSettings 
+      action: 'update-style-only', 
+      style: currentSettings.style 
     });
   }
   
   async function handleTranslatePage() {
     const btn = document.getElementById('translatePageBtn');
+    if (!btn) return;
+    
     const originalText = btn.textContent;
     
     btn.textContent = '翻译中...';
     btn.disabled = true;
     
-    sendMessageToContentScript({ action: 'translate-page' });
+    try {
+      await new Promise((resolve) => {
+        sendMessageToContentScript({ action: 'translate-page' }, (response) => {
+          resolve(response);
+        });
+      });
+    } catch (e) {
+      console.error('翻译页面失败:', e);
+    }
     
     setTimeout(() => {
       btn.textContent = originalText;
       btn.disabled = false;
-    }, 2000);
+    }, 500);
   }
   
   function handleClearTranslations() {
@@ -255,14 +347,19 @@
     });
   }
   
-  function sendMessageToContentScript(message) {
+  function sendMessageToContentScript(message, callback) {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       if (tabs[0]) {
-        chrome.tabs.sendMessage(tabs[0].id, message, () => {
+        chrome.tabs.sendMessage(tabs[0].id, message, (response) => {
           if (chrome.runtime.lastError) {
             console.log('无法连接到内容脚本:', chrome.runtime.lastError.message);
           }
+          if (callback) {
+            callback(response);
+          }
         });
+      } else if (callback) {
+        callback(null);
       }
     });
   }
