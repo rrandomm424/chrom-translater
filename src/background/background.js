@@ -207,6 +207,17 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   }
   
+  if (request.action === 'get-custom-translations') {
+    getCustomTranslations()
+      .then((customTranslations) => {
+        sendResponse({ success: true, customTranslations });
+      })
+      .catch(() => {
+        sendResponse({ success: false, customTranslations: {} });
+      });
+    return true;
+  }
+  
   if (request.action === 'remove-exclude-word') {
     removeExcludeWord(request.word)
       .then(() => {
@@ -214,6 +225,17 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       })
       .catch(() => {
         sendResponse({ success: false });
+      });
+    return true;
+  }
+  
+  if (request.action === 'get-word-definition') {
+    getWordDefinition(request.word, request.lang)
+      .then((definition) => {
+        sendResponse({ success: true, definition });
+      })
+      .catch(() => {
+        sendResponse({ success: false, definition: null });
       });
     return true;
   }
@@ -552,4 +574,91 @@ async function getCustomTranslation(original, from, to) {
   const customTranslations = await getCustomTranslations();
   const key = `${from}|${to}|${original.toLowerCase()}`;
   return customTranslations[key]?.customTranslation || null;
+}
+
+async function getWordDefinition(word, lang) {
+  const lowerWord = word.toLowerCase().trim();
+  
+  if (lang === 'en' || detectLanguage(lowerWord) === 'en') {
+    try {
+      const definition = await getEnglishDefinition(lowerWord);
+      if (definition) {
+        return definition;
+      }
+    } catch (e) {
+      console.warn('获取英文释义失败:', e);
+    }
+  }
+  
+  const chineseTranslation = await handleTranslation(lowerWord, lang, lang === 'zh' ? 'en' : 'zh');
+  
+  return {
+    word: lowerWord,
+    simpleTranslation: chineseTranslation,
+    definitions: [],
+    phonetic: null,
+    examples: []
+  };
+}
+
+async function getEnglishDefinition(word) {
+  const url = `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`;
+  
+  try {
+    const response = await fetch(url);
+    
+    if (!response.ok) {
+      return null;
+    }
+    
+    const data = await response.json();
+    
+    if (!Array.isArray(data) || data.length === 0) {
+      return null;
+    }
+    
+    const entry = data[0];
+    const result = {
+      word: entry.word || word,
+      phonetic: entry.phonetic || null,
+      phonetics: entry.phonetics || [],
+      definitions: [],
+      examples: []
+    };
+    
+    if (entry.meanings && Array.isArray(entry.meanings)) {
+      for (const meaning of entry.meanings) {
+        const partOfSpeech = meaning.partOfSpeech;
+        
+        if (meaning.definitions && Array.isArray(meaning.definitions)) {
+          for (const def of meaning.definitions.slice(0, 3)) {
+            result.definitions.push({
+              partOfSpeech: partOfSpeech,
+              definition: def.definition,
+              example: def.example || null
+            });
+            
+            if (def.example) {
+              result.examples.push(def.example);
+            }
+          }
+        }
+      }
+    }
+    
+    result.simpleTranslation = await translateToChinese(result.word);
+    
+    return result;
+  } catch (error) {
+    console.error('词典API请求失败:', error);
+    return null;
+  }
+}
+
+async function translateToChinese(word) {
+  try {
+    return await handleTranslation(word, 'en', 'zh');
+  } catch (e) {
+    return null;
+  }
 }

@@ -43,11 +43,14 @@
   let pageLoadComplete = false;
   let currentSelectionInfo = null;
   let selectionDebounceTimer = null;
+  let excludeWordsCache = new Set();
+  let customTranslationsCache = new Map();
   
   init();
   
   async function init() {
     await loadSettings();
+    await loadCaches();
     setupMessageListeners();
     setupSelectionListener();
     
@@ -59,6 +62,46 @@
         translatePage();
       }, 1000);
     }
+  }
+  
+  async function loadCaches() {
+    try {
+      await loadExcludeWordsCache();
+      await loadCustomTranslationsCache();
+    } catch (e) {
+      console.warn('加载缓存失败:', e);
+    }
+  }
+  
+  async function loadExcludeWordsCache() {
+    return new Promise((resolve) => {
+      chrome.runtime.sendMessage(
+        { action: 'get-exclude-words' },
+        (response) => {
+          if (response && response.success && response.words) {
+            excludeWordsCache = new Set(response.words);
+          }
+          resolve();
+        }
+      );
+    });
+  }
+  
+  async function loadCustomTranslationsCache() {
+    return new Promise((resolve) => {
+      chrome.runtime.sendMessage(
+        { action: 'get-custom-translations' },
+        (response) => {
+          if (response && response.success && response.customTranslations) {
+            customTranslationsCache = new Map();
+            for (const [key, value] of Object.entries(response.customTranslations)) {
+              customTranslationsCache.set(key, value.customTranslation);
+            }
+          }
+          resolve();
+        }
+      );
+    });
   }
   
   function setupSelectionListener() {
@@ -129,6 +172,19 @@
       return;
     }
     
+    const isSingleWord = isSingleWordText(text, detectedLang);
+    
+    if (isSingleWord) {
+      const wordDefinition = await getWordDefinitionFromBackground(text, detectedLang);
+      
+      if (wordDefinition && wordDefinition.definitions && wordDefinition.definitions.length > 0) {
+        currentSelectionInfo.translation = wordDefinition.simpleTranslation || wordDefinition.definitions[0].definition;
+        currentSelectionInfo.definition = wordDefinition;
+        showTranslationPopupWithDefinition(wordDefinition, customTranslation !== null);
+        return;
+      }
+    }
+    
     let translatedText = customTranslation;
     if (!translatedText) {
       translatedText = await sendTranslationRequest(text, detectedLang, targetLang);
@@ -140,6 +196,21 @@
     } else {
       hideTranslationPopup();
     }
+  }
+  
+  async function getWordDefinitionFromBackground(word, lang) {
+    return new Promise((resolve) => {
+      chrome.runtime.sendMessage(
+        { action: 'get-word-definition', word, lang },
+        (response) => {
+          if (response && response.success && response.definition) {
+            resolve(response.definition);
+          } else {
+            resolve(null);
+          }
+        }
+      );
+    });
   }
   
   async function getCustomTranslationFromBackground(text, from, to) {
@@ -223,6 +294,175 @@
         }
       }, 0);
     }
+  }
+  
+  function getPartOfSpeechCN(pos) {
+    const posMap = {
+      'noun': '名词',
+      'verb': '动词',
+      'adjective': '形容词',
+      'adverb': '副词',
+      'preposition': '介词',
+      'conjunction': '连词',
+      'pronoun': '代词',
+      'interjection': '感叹词',
+      'determiner': '限定词',
+      'numeral': '数词',
+      'article': '冠词'
+    };
+    return posMap[pos] || pos;
+  }
+  
+  async function showTranslationPopupWithDefinition(definition, isCustom = false) {
+    const existingPopup = document.getElementById('translator-extension-popup');
+    if (existingPopup) {
+      existingPopup.remove();
+    }
+    
+    if (!currentSelectionInfo) return;
+    
+    const popup = document.createElement('div');
+    popup.id = 'translator-extension-popup';
+    popup.className = 'translator-extension-popup translator-extension-popup-large';
+    
+    const isInVocab = await checkWordInVocabulary(currentSelectionInfo.original);
+    
+    const styleString = generateStyleString(currentSettings.style);
+    const customBadge = isCustom ? '<span class="translator-extension-custom-badge">自定义</span>' : '';
+    const favIcon = isInVocab ? '★' : '☆';
+    const favClass = isInVocab ? 'active' : '';
+    
+    const phoneticDisplay = definition.phonetic 
+      ? `<span class="translator-extension-phonetic">${escapeHtml(definition.phonetic)}</span>` 
+      : '';
+    
+    let definitionsHtml = '';
+    const groupedDefinitions = {};
+    
+    if (definition.definitions && definition.definitions.length > 0) {
+      for (const def of definition.definitions) {
+        const pos = def.partOfSpeech;
+        if (!groupedDefinitions[pos]) {
+          groupedDefinitions[pos] = [];
+        }
+        groupedDefinitions[pos].push(def);
+      }
+      
+      for (const [pos, defs] of Object.entries(groupedDefinitions)) {
+        const posCN = getPartOfSpeechCN(pos);
+        definitionsHtml += `
+          <div class="translator-extension-def-group">
+            <div class="translator-extension-pos">
+              <span class="translator-extension-pos-en">${escapeHtml(pos)}</span>
+              <span class="translator-extension-pos-cn">${escapeHtml(posCN)}</span>
+            </div>
+            <div class="translator-extension-def-list">
+        `;
+        
+        for (let i = 0; i < defs.length; i++) {
+          const def = defs[i];
+          const exampleHtml = def.example 
+            ? `<div class="translator-extension-example">「例」${escapeHtml(def.example)}</div>` 
+            : '';
+          
+          definitionsHtml += `
+            <div class="translator-extension-def-item">
+              <span class="translator-extension-def-num">${i + 1}.</span>
+              <span class="translator-extension-def-text">${escapeHtml(def.definition)}</span>
+              ${exampleHtml}
+            </div>
+          `;
+        }
+        
+        definitionsHtml += `
+            </div>
+          </div>
+        `;
+      }
+    }
+    
+    const simpleTranslationHtml = definition.simpleTranslation 
+      ? `<div class="translator-extension-simple-trans" style="${styleString}">${escapeHtml(definition.simpleTranslation)}</div>` 
+      : '';
+    
+    popup.innerHTML = `
+      <div class="translator-extension-popup-header">
+        <div class="translator-extension-popup-title">
+          <span>📚 单词释义</span>
+          ${customBadge}
+        </div>
+        <button class="translator-extension-close-btn">×</button>
+      </div>
+      <div class="translator-extension-popup-original translator-extension-word-header">
+        <div class="translator-extension-word-main">
+          <span class="translator-extension-word">${escapeHtml(definition.word || currentSelectionInfo.original)}</span>
+          ${phoneticDisplay}
+        </div>
+        ${simpleTranslationHtml}
+      </div>
+      ${definitionsHtml ? `<div class="translator-extension-popup-divider"></div>` : ''}
+      ${definitionsHtml}
+      <div class="translator-extension-popup-divider"></div>
+      <div class="translator-extension-popup-actions">
+        <button class="translator-extension-action-btn translator-extension-fav-btn ${favClass}" data-action="favorite" title="收藏到词库">
+          <span class="translator-extension-action-icon">${favIcon}</span>
+          <span>收藏</span>
+        </button>
+        <button class="translator-extension-action-btn" data-action="exclude" title="不翻译此单词">
+          <span class="translator-extension-action-icon">🚫</span>
+          <span>不翻译</span>
+        </button>
+        <button class="translator-extension-action-btn" data-action="custom" title="自定义翻译结果">
+          <span class="translator-extension-action-icon">✏️</span>
+          <span>自定义</span>
+        </button>
+      </div>
+      <div class="translator-extension-custom-editor" style="display: none;">
+        <textarea class="translator-extension-custom-input" placeholder="输入自定义翻译结果...">${escapeHtml(definition.simpleTranslation || '')}</textarea>
+        <div class="translator-extension-custom-actions">
+          <button class="translator-extension-custom-save">保存</button>
+          <button class="translator-extension-custom-cancel">取消</button>
+        </div>
+      </div>
+    `;
+    
+    positionPopup(popup);
+    
+    const closeBtn = popup.querySelector('.translator-extension-close-btn');
+    closeBtn.onclick = () => hideTranslationPopup();
+    
+    const actionBtns = popup.querySelectorAll('.translator-extension-action-btn');
+    actionBtns.forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        const action = e.currentTarget.dataset.action;
+        await handlePopupAction(action, popup);
+      });
+    });
+    
+    const customEditor = popup.querySelector('.translator-extension-custom-editor');
+    const customInput = popup.querySelector('.translator-extension-custom-input');
+    const saveBtn = popup.querySelector('.translator-extension-custom-save');
+    const cancelBtn = popup.querySelector('.translator-extension-custom-cancel');
+    
+    saveBtn.addEventListener('click', async () => {
+      const customText = customInput.value.trim();
+      if (customText && currentSelectionInfo) {
+        await saveCustomTranslation(customText);
+        const newDefinition = {
+          ...definition,
+          simpleTranslation: customText
+        };
+        showTranslationPopupWithDefinition(newDefinition, true);
+      }
+    });
+    
+    cancelBtn.addEventListener('click', () => {
+      customEditor.style.display = 'none';
+    });
+    
+    document.body.appendChild(popup);
+    
+    setupPopupCloseListener(popup);
   }
   
   async function showTranslationPopupEnhanced(translatedText, isCustom = false) {
@@ -865,11 +1105,23 @@
         return;
       }
       
+      if (isTextExcluded(text, detectedLang)) {
+        return;
+      }
+      
+      const customTranslation = getCachedCustomTranslation(text, detectedLang, targetLang);
+      if (customTranslation) {
+        if (customTranslation !== text) {
+          insertTranslation(textNode, nodeId, customTranslation);
+        }
+        return;
+      }
+      
       const cacheKey = `${detectedLang}|${targetLang}|${text}`;
       let translatedText = TRANSLATION_CACHE.get(cacheKey);
       
       if (!translatedText) {
-        translatedText = await sendTranslationRequest(text, detectedLang, targetLang);
+        translatedText = await translateTextWithCustomCheck(text, detectedLang, targetLang);
         if (translatedText) {
           TRANSLATION_CACHE.set(cacheKey, translatedText);
         }
@@ -881,6 +1133,97 @@
     } finally {
       PROCESSING_NODES.delete(textNode);
     }
+  }
+  
+  function isTextExcluded(text, lang) {
+    const trimmedText = text.trim().toLowerCase();
+    
+    if (excludeWordsCache.has(trimmedText)) {
+      return true;
+    }
+    
+    const words = extractWords(text, lang);
+    for (const word of words) {
+      if (excludeWordsCache.has(word.toLowerCase())) {
+        return true;
+      }
+    }
+    
+    return false;
+  }
+  
+  function extractWords(text, lang) {
+    if (lang === 'zh') {
+      return [text.trim()];
+    }
+    
+    const matches = text.match(/[a-zA-Z]+/g);
+    return matches ? matches : [text.trim()];
+  }
+  
+  function getCachedCustomTranslation(text, from, to) {
+    const key = `${from}|${to}|${text.toLowerCase()}`;
+    return customTranslationsCache.get(key) || null;
+  }
+  
+  async function translateTextWithCustomCheck(text, from, to) {
+    const isSingleWord = isSingleWordText(text, from);
+    
+    if (isSingleWord) {
+      const customTranslation = getCachedCustomTranslation(text, from, to);
+      if (customTranslation) {
+        return customTranslation;
+      }
+    }
+    
+    const words = extractWords(text, from);
+    let hasCustomWords = false;
+    const customWordTranslations = new Map();
+    
+    for (const word of words) {
+      const custom = getCachedCustomTranslation(word, from, to);
+      if (custom) {
+        hasCustomWords = true;
+        customWordTranslations.set(word.toLowerCase(), custom);
+      }
+    }
+    
+    if (hasCustomWords && customWordTranslations.size > 0) {
+      return await translateWithCustomWords(text, from, to, customWordTranslations);
+    }
+    
+    return await sendTranslationRequest(text, from, to);
+  }
+  
+  function isSingleWordText(text, lang) {
+    const trimmed = text.trim();
+    
+    if (lang === 'zh') {
+      return trimmed.length >= 1 && !trimmed.includes(' ') && !trimmed.includes('，') && !trimmed.includes('。');
+    }
+    
+    const englishWords = trimmed.match(/[a-zA-Z]+/g);
+    return englishWords && englishWords.length === 1;
+  }
+  
+  async function translateWithCustomWords(text, from, to, customWordTranslations) {
+    const baseTranslation = await sendTranslationRequest(text, from, to);
+    
+    if (!baseTranslation) {
+      return null;
+    }
+    
+    let result = baseTranslation;
+    for (const [word, customTranslation] of customWordTranslations) {
+      const regex = new RegExp(escapeRegExp(word), 'gi');
+      result = result.replace(regex, customTranslation);
+    }
+    
+    return result;
+  }
+  
+  function escapeRegExp(string) {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
   
   function getTextNodeId(textNode) {
