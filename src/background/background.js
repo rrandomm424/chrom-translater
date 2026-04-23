@@ -110,7 +110,22 @@ async function handleTranslation(text, from, to) {
     return cachedTranslation;
   }
   
-  const translation = await translateWithMyMemory(text, actualFrom, actualTo);
+  let translation = null;
+  
+  try {
+    console.log('尝试使用 Google 翻译...');
+    translation = await translateWithGoogle(text, actualFrom, actualTo);
+    console.log('Google 翻译成功');
+  } catch (googleError) {
+    console.warn('Google 翻译失败，尝试 MyMemory:', googleError.message);
+    try {
+      translation = await translateWithMyMemory(text, actualFrom, actualTo);
+      console.log('MyMemory 翻译成功');
+    } catch (mymemoryError) {
+      console.error('所有翻译服务都失败了:', mymemoryError.message);
+      throw new Error(`翻译失败: ${mymemoryError.message}`);
+    }
+  }
   
   if (translation) {
     await saveToCache(text, actualFrom, actualTo, translation);
@@ -135,6 +150,51 @@ function detectLanguage(text) {
     const englishCount = (text.match(/[a-zA-Z]/g) || []).length;
     
     return chineseCount > englishCount ? 'zh' : 'en';
+  }
+}
+
+async function translateWithGoogle(text, from, to) {
+  const googleLang = {
+    'zh': 'zh-CN',
+    'en': 'en',
+    'ja': 'ja',
+    'ko': 'ko',
+    'ja': 'ja',
+    'fr': 'fr',
+    'de': 'de',
+    'es': 'es',
+    'ru': 'ru'
+  };
+  
+  const sourceLang = googleLang[from] || from;
+  const targetLang = googleLang[to] || to;
+  
+  const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sourceLang}&tl=${targetLang}&dt=t&q=${encodeURIComponent(text)}`;
+  
+  try {
+    const response = await fetch(url);
+    
+    if (!response.ok) {
+      throw new Error(`HTTP 错误: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    
+    if (data && data[0] && Array.isArray(data[0])) {
+      const translatedText = data[0]
+        .map((item) => item[0])
+        .filter((text) => text)
+        .join('');
+      
+      if (translatedText && translatedText.trim()) {
+        return translatedText.trim();
+      }
+    }
+    
+    throw new Error('Google 翻译返回无效数据');
+  } catch (error) {
+    console.error('Google 翻译失败:', error);
+    throw error;
   }
 }
 
