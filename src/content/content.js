@@ -1105,10 +1105,6 @@
         return;
       }
       
-      if (isTextExcluded(text, detectedLang)) {
-        return;
-      }
-      
       const customTranslation = getCachedCustomTranslation(text, detectedLang, targetLang);
       if (customTranslation) {
         if (customTranslation !== text) {
@@ -1121,7 +1117,7 @@
       let translatedText = TRANSLATION_CACHE.get(cacheKey);
       
       if (!translatedText) {
-        translatedText = await translateTextWithCustomCheck(text, detectedLang, targetLang);
+        translatedText = await translateTextWithCustomAndExclude(text, detectedLang, targetLang);
         if (translatedText) {
           TRANSLATION_CACHE.set(cacheKey, translatedText);
         }
@@ -1135,21 +1131,22 @@
     }
   }
   
-  function isTextExcluded(text, lang) {
+  function getExcludedWords(text, lang) {
+    const excluded = [];
     const trimmedText = text.trim().toLowerCase();
     
     if (excludeWordsCache.has(trimmedText)) {
-      return true;
+      return [text.trim()];
     }
     
     const words = extractWords(text, lang);
     for (const word of words) {
       if (excludeWordsCache.has(word.toLowerCase())) {
-        return true;
+        excluded.push(word);
       }
     }
     
-    return false;
+    return excluded;
   }
   
   function extractWords(text, lang) {
@@ -1166,7 +1163,7 @@
     return customTranslationsCache.get(key) || null;
   }
   
-  async function translateTextWithCustomCheck(text, from, to) {
+  async function translateTextWithCustomAndExclude(text, from, to) {
     const isSingleWord = isSingleWordText(text, from);
     
     if (isSingleWord) {
@@ -1177,19 +1174,23 @@
     }
     
     const words = extractWords(text, from);
-    let hasCustomWords = false;
     const customWordTranslations = new Map();
+    const excludedWords = [];
     
     for (const word of words) {
       const custom = getCachedCustomTranslation(word, from, to);
       if (custom) {
-        hasCustomWords = true;
-        customWordTranslations.set(word.toLowerCase(), custom);
+        customWordTranslations.set(word.toLowerCase(), { type: 'custom', value: custom });
+      }
+      
+      if (excludeWordsCache.has(word.toLowerCase())) {
+        excludedWords.push(word);
+        customWordTranslations.set(word.toLowerCase(), { type: 'exclude', value: word });
       }
     }
     
-    if (hasCustomWords && customWordTranslations.size > 0) {
-      return await translateWithCustomWords(text, from, to, customWordTranslations);
+    if (customWordTranslations.size > 0) {
+      return await translateWithCustomAndExcludeWords(text, from, to, customWordTranslations);
     }
     
     return await sendTranslationRequest(text, from, to);
@@ -1206,7 +1207,7 @@
     return englishWords && englishWords.length === 1;
   }
   
-  async function translateWithCustomWords(text, from, to, customWordTranslations) {
+  async function translateWithCustomAndExcludeWords(text, from, to, wordTranslations) {
     const baseTranslation = await sendTranslationRequest(text, from, to);
     
     if (!baseTranslation) {
@@ -1214,9 +1215,18 @@
     }
     
     let result = baseTranslation;
-    for (const [word, customTranslation] of customWordTranslations) {
-      const regex = new RegExp(escapeRegExp(word), 'gi');
-      result = result.replace(regex, customTranslation);
+    
+    for (const [word, info] of wordTranslations) {
+      if (info.type === 'custom') {
+        const regex = new RegExp(escapeRegExp(word), 'gi');
+        result = result.replace(regex, info.value);
+      } else if (info.type === 'exclude') {
+        const translatedWord = await sendTranslationRequest(word, from, to);
+        if (translatedWord && translatedWord !== word) {
+          const regex = new RegExp(escapeRegExp(translatedWord), 'gi');
+          result = result.replace(regex, word);
+        }
+      }
     }
     
     return result;
