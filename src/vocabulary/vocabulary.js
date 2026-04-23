@@ -4,12 +4,45 @@
   let currentVocabulary = [];
   let currentExcludeWords = [];
   let editingId = null;
+  let currentSearchTerm = '';
   
   document.addEventListener('DOMContentLoaded', init);
   
   async function init() {
     setupEventListeners();
+    setupDelegatedEvents();
     await loadData();
+  }
+  
+  function setupDelegatedEvents() {
+    const vocabularyList = document.getElementById('vocabularyList');
+    const excludeList = document.getElementById('excludeList');
+    
+    vocabularyList.addEventListener('click', async (e) => {
+      const target = e.target.closest('.action-icon-btn');
+      if (!target) return;
+      
+      const id = target.dataset.id;
+      if (!id) return;
+      
+      if (target.classList.contains('edit')) {
+        openEditModal(id);
+      } else if (target.classList.contains('delete')) {
+        if (confirm('确定要删除这个单词吗？')) {
+          await deleteVocabularyItem(id);
+        }
+      }
+    });
+    
+    excludeList.addEventListener('click', async (e) => {
+      const target = e.target.closest('.btn-danger');
+      if (!target) return;
+      
+      const word = target.dataset.word;
+      if (!word) return;
+      
+      await removeExcludeWord(word);
+    });
   }
   
   function setupEventListeners() {
@@ -135,26 +168,11 @@
         </div>
       </div>
     `).join('');
-    
-    list.querySelectorAll('.action-icon-btn.edit').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const id = btn.dataset.id;
-        openEditModal(id);
-      });
-    });
-    
-    list.querySelectorAll('.action-icon-btn.delete').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const id = btn.dataset.id;
-        if (confirm('确定要删除这个单词吗？')) {
-          await deleteVocabularyItem(id);
-        }
-      });
-    });
   }
   
   function handleSearch(e) {
     const searchTerm = e.target.value.toLowerCase().trim();
+    currentSearchTerm = searchTerm;
     
     if (!searchTerm) {
       renderVocabulary();
@@ -168,6 +186,19 @@
     );
     
     renderFilteredVocabulary(filtered);
+  }
+  
+  function refreshCurrentView() {
+    if (currentSearchTerm) {
+      const filtered = currentVocabulary.filter(item => 
+        item.word.toLowerCase().includes(currentSearchTerm) ||
+        item.translation.toLowerCase().includes(currentSearchTerm) ||
+        (item.notes && item.notes.toLowerCase().includes(currentSearchTerm))
+      );
+      renderFilteredVocabulary(filtered);
+    } else {
+      renderVocabulary();
+    }
   }
   
   function renderFilteredVocabulary(filtered) {
@@ -203,22 +234,6 @@
         </div>
       </div>
     `).join('');
-    
-    list.querySelectorAll('.action-icon-btn.edit').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const id = btn.dataset.id;
-        openEditModal(id);
-      });
-    });
-    
-    list.querySelectorAll('.action-icon-btn.delete').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const id = btn.dataset.id;
-        if (confirm('确定要删除这个单词吗？')) {
-          await deleteVocabularyItem(id);
-        }
-      });
-    });
   }
   
   function handleExport() {
@@ -284,7 +299,7 @@
       const response = await sendMessage({ action: 'remove-vocabulary-item', id });
       if (response && response.success) {
         currentVocabulary = currentVocabulary.filter(item => item.id !== id);
-        renderVocabulary();
+        refreshCurrentView();
         showToast('已删除');
       }
     } catch (error) {
@@ -331,7 +346,7 @@
           item.notes = notes;
           item.updatedAt = Date.now();
         }
-        renderVocabulary();
+        refreshCurrentView();
         closeModal();
         showToast('保存成功');
       }
@@ -360,13 +375,6 @@
         <button class="btn-danger" style="padding: 4px 12px; font-size: 12px;" data-word="${word}">移除</button>
       </div>
     `).join('');
-    
-    list.querySelectorAll('.btn-danger').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const word = btn.dataset.word;
-        await removeExcludeWord(word);
-      });
-    });
   }
   
   async function handleAddExclude() {
