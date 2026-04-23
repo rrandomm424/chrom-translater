@@ -97,13 +97,15 @@ input:checked + .slider:before {
 
 .settings-section,
 .style-section,
-.quick-actions {
+.quick-actions,
+.vocabulary-section {
   margin-bottom: 20px;
 }
 
 .settings-section h2,
 .style-section h2,
-.quick-actions h2 {
+.quick-actions h2,
+.vocabulary-section h2 {
   font-size: 14px;
   font-weight: 600;
   margin-bottom: 12px;
@@ -341,4 +343,35 @@ input:checked + .slider:before {
 .version {
   font-size: 11px;
   color: #999;
+}
+
+.vocabulary-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.vocabulary-btn {
+  flex: 1;
+  padding: 14px 16px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.vocabulary-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.vocabulary-icon {
+  font-size: 18px;
 }

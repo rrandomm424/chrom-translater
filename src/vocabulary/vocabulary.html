@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>词库管理 - 网页翻译助手</title>
+  <link rel="stylesheet" href="vocabulary.css">
+</head>
+<body>
+  <div class="vocabulary-container">
+    <header class="vocabulary-header">
+      <h1>📚 我的词库</h1>
+      <p class="subtitle">管理您收藏的翻译词汇</p>
+      <nav class="header-nav">
+        <button id="navVocabulary" class="nav-btn active">词库</button>
+        <button id="navExclude" class="nav-btn">不翻译列表</button>
+      </nav>
+    </header>
+    
+    <main class="vocabulary-main">
+      <section id="vocabularySection" class="settings-card">
+        <div class="section-header">
+          <h2>收藏的词汇</h2>
+          <div class="section-actions">
+            <input type="text" id="searchInput" placeholder="搜索词汇..." class="search-input">
+            <button id="exportBtn" class="btn-secondary">导出</button>
+            <button id="clearAllBtn" class="btn-danger">清空</button>
+          </div>
+        </div>
+        
+        <div class="vocabulary-list" id="vocabularyList">
+          <div class="empty-state" id="vocabularyEmpty">
+            <div class="empty-icon">📖</div>
+            <p>暂无收藏的词汇</p>
+            <p class="empty-hint">在网页中划词翻译后点击「收藏」按钮添加词汇</p>
+          </div>
+        </div>
+      </section>
+      
+      <section id="excludeSection" class="settings-card" style="display: none;">
+        <div class="section-header">
+          <h2>不翻译列表</h2>
+          <div class="section-actions">
+            <div class="add-exclude-wrapper">
+              <input type="text" id="newExcludeInput" placeholder="输入单词..." class="search-input">
+              <button id="addExcludeBtn" class="btn-primary">添加</button>
+            </div>
+          </div>
+        </div>
+        
+        <div class="exclude-list" id="excludeList">
+          <div class="empty-state" id="excludeEmpty">
+            <div class="empty-icon">🚫</div>
+            <p>暂无不翻译的单词</p>
+            <p class="empty-hint">在网页中划词翻译后点击「不翻译」按钮添加单词</p>
+          </div>
+        </div>
+      </section>
+    </main>
+    
+    <footer class="vocabulary-footer">
+      <p class="version-info">网页翻译助手 v1.0.0</p>
+    </footer>
+  </div>
+  
+  <div id="editModal" class="modal" style="display: none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>编辑笔记</h3>
+        <button class="modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-word">
+          <span class="modal-label">单词:</span>
+          <span id="modalWord" class="modal-word-text"></span>
+        </div>
+        <div class="modal-translation">
+          <span class="modal-label">翻译:</span>
+          <span id="modalTranslation" class="modal-translation-text"></span>
+        </div>
+        <div class="modal-notes">
+          <label class="modal-label" for="modalNotes">笔记:</label>
+          <textarea id="modalNotes" class="modal-notes-input" placeholder="添加笔记..."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary modal-cancel">取消</button>
+        <button class="btn-primary modal-save">保存</button>
+      </div>
+    </div>
+  </div>
+  
+  <div id="toast" class="toast">
+    <span id="toastMessage">操作成功</span>
+  </div>
+  
+  <script src="vocabulary.js"></script>
+</body>
+</html>

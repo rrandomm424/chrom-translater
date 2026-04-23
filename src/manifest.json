@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "网页翻译助手",
-  "version": "1.0.0",
-  "description": "网页翻译 Chrome 扩展 - 支持中英互译，自动检测文本，自定义翻译样式",
+  "version": "1.1.0",
+  "description": "网页翻译 Chrome 扩展 - 支持中英互译，划词翻译，词库管理，自动检测文本，自定义翻译样式",
   "permissions": [
     "activeTab",
     "storage",
