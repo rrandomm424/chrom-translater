@@ -188,6 +188,104 @@
   border-radius: 4px;
 }
 
+.translator-extension-popup-large {
+  max-width: 480px;
+}
+
+.translator-extension-word-header {
+  padding: 16px;
+}
+
+.translator-extension-word-main {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.translator-extension-word {
+  font-size: 22px;
+  font-weight: 600;
+  color: #333;
+}
+
+.translator-extension-phonetic {
+  font-size: 14px;
+  color: #667eea;
+  font-weight: 500;
+}
+
+.translator-extension-simple-trans {
+  font-size: 15px;
+  color: #333;
+  margin-top: 8px;
+  word-break: break-word;
+  white-space: pre-wrap;
+  padding: 8px 12px;
+  background-color: #fff;
+  border-radius: 6px;
+  border-left: 3px solid #667eea;
+}
+
+.translator-extension-def-group {
+  padding: 12px 16px;
+}
+
+.translator-extension-pos {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.translator-extension-pos-en {
+  font-size: 13px;
+  font-weight: 600;
+  color: #667eea;
+  background-color: #f0f2ff;
+  padding: 4px 10px;
+  border-radius: 4px;
+  letter-spacing: 0.5px;
+}
+
+.translator-extension-pos-cn {
+  font-size: 12px;
+  color: #888;
+  font-weight: 500;
+}
+
+.translator-extension-def-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.translator-extension-def-item {
+  padding-left: 4px;
+}
+
+.translator-extension-def-num {
+  font-size: 13px;
+  font-weight: 500;
+  color: #999;
+  margin-right: 4px;
+}
+
+.translator-extension-def-text {
+  font-size: 14px;
+  color: #444;
+  line-height: 1.6;
+}
+
+.translator-extension-example {
+  font-size: 13px;
+  color: #888;
+  font-style: italic;
+  margin-top: 4px;
+  padding-left: 20px;
+  line-height: 1.5;
+}
+
 .translator-extension-popup-divider {
   height: 1px;
   background-color: #f0f0f0;
