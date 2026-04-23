@@ -85,6 +85,138 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     });
     return true;
   }
+  
+  if (request.action === 'get-custom-translation') {
+    getCustomTranslation(request.text, request.from, request.to)
+      .then((customTranslation) => {
+        sendResponse({ success: true, customTranslation });
+      })
+      .catch(() => {
+        sendResponse({ success: false, customTranslation: null });
+      });
+    return true;
+  }
+  
+  if (request.action === 'is-word-excluded') {
+    isWordExcluded(request.word)
+      .then((excluded) => {
+        sendResponse({ success: true, excluded });
+      })
+      .catch(() => {
+        sendResponse({ success: false, excluded: false });
+      });
+    return true;
+  }
+  
+  if (request.action === 'is-word-in-vocabulary') {
+    isWordInVocabulary(request.word)
+      .then((inVocabulary) => {
+        sendResponse({ success: true, inVocabulary });
+      })
+      .catch(() => {
+        sendResponse({ success: false, inVocabulary: false });
+      });
+    return true;
+  }
+  
+  if (request.action === 'add-to-vocabulary') {
+    addToVocabulary(request.word, request.translation, request.from, request.to)
+      .then(() => {
+        sendResponse({ success: true });
+      })
+      .catch(() => {
+        sendResponse({ success: false });
+      });
+    return true;
+  }
+  
+  if (request.action === 'remove-from-vocabulary') {
+    removeFromVocabularyByWord(request.word)
+      .then(() => {
+        sendResponse({ success: true });
+      })
+      .catch(() => {
+        sendResponse({ success: false });
+      });
+    return true;
+  }
+  
+  if (request.action === 'add-exclude-word') {
+    addExcludeWord(request.word)
+      .then(() => {
+        sendResponse({ success: true });
+      })
+      .catch(() => {
+        sendResponse({ success: false });
+      });
+    return true;
+  }
+  
+  if (request.action === 'add-custom-translation') {
+    addCustomTranslation(request.original, request.customTranslation, request.from, request.to)
+      .then(() => {
+        sendResponse({ success: true });
+      })
+      .catch(() => {
+        sendResponse({ success: false });
+      });
+    return true;
+  }
+  
+  if (request.action === 'get-vocabulary') {
+    getVocabulary()
+      .then((vocabulary) => {
+        sendResponse({ success: true, vocabulary });
+      })
+      .catch(() => {
+        sendResponse({ success: false, vocabulary: [] });
+      });
+    return true;
+  }
+  
+  if (request.action === 'remove-vocabulary-item') {
+    removeFromVocabulary(request.id)
+      .then(() => {
+        sendResponse({ success: true });
+      })
+      .catch(() => {
+        sendResponse({ success: false });
+      });
+    return true;
+  }
+  
+  if (request.action === 'update-vocabulary-notes') {
+    updateVocabularyNotes(request.id, request.notes)
+      .then(() => {
+        sendResponse({ success: true });
+      })
+      .catch(() => {
+        sendResponse({ success: false });
+      });
+    return true;
+  }
+  
+  if (request.action === 'get-exclude-words') {
+    getExcludeWords()
+      .then((words) => {
+        sendResponse({ success: true, words });
+      })
+      .catch(() => {
+        sendResponse({ success: false, words: [] });
+      });
+    return true;
+  }
+  
+  if (request.action === 'remove-exclude-word') {
+    removeExcludeWord(request.word)
+      .then(() => {
+        sendResponse({ success: true });
+      })
+      .catch(() => {
+        sendResponse({ success: false });
+      });
+    return true;
+  }
 });
 
 async function handleTranslation(text, from, to) {
@@ -246,3 +378,178 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
     updateBadge(newSettings ? newSettings.enabled : true);
   }
 });
+
+const VOCABULARY_KEY = 'translator_vocabulary';
+const EXCLUDE_WORDS_KEY = 'translator_exclude_words';
+const CUSTOM_TRANSLATIONS_KEY = 'translator_custom_translations';
+
+async function getVocabulary() {
+  return new Promise((resolve) => {
+    chrome.storage.local.get({ [VOCABULARY_KEY]: [] }, (result) => {
+      resolve(result[VOCABULARY_KEY]);
+    });
+  });
+}
+
+async function addToVocabulary(word, translation, from, to, notes = '') {
+  return new Promise((resolve) => {
+    chrome.storage.local.get({ [VOCABULARY_KEY]: [] }, (result) => {
+      const vocabulary = result[VOCABULARY_KEY];
+      
+      const existingIndex = vocabulary.findIndex(item => item.word.toLowerCase() === word.toLowerCase());
+      
+      if (existingIndex >= 0) {
+        vocabulary[existingIndex] = {
+          ...vocabulary[existingIndex],
+          translation,
+          from,
+          to,
+          notes,
+          updatedAt: Date.now()
+        };
+      } else {
+        vocabulary.unshift({
+          id: 'vocab-' + Date.now(),
+          word,
+          translation,
+          from,
+          to,
+          notes,
+          createdAt: Date.now(),
+          updatedAt: Date.now()
+        });
+      }
+      
+      if (vocabulary.length > 500) {
+        vocabulary.pop();
+      }
+      
+      chrome.storage.local.set({ [VOCABULARY_KEY]: vocabulary }, () => {
+        resolve(vocabulary);
+      });
+    });
+  });
+}
+
+async function removeFromVocabulary(id) {
+  return new Promise((resolve) => {
+    chrome.storage.local.get({ [VOCABULARY_KEY]: [] }, (result) => {
+      const vocabulary = result[VOCABULARY_KEY].filter(item => item.id !== id);
+      chrome.storage.local.set({ [VOCABULARY_KEY]: vocabulary }, () => {
+        resolve(vocabulary);
+      });
+    });
+  });
+}
+
+async function removeFromVocabularyByWord(word) {
+  return new Promise((resolve) => {
+    chrome.storage.local.get({ [VOCABULARY_KEY]: [] }, (result) => {
+      const lowerWord = word.toLowerCase();
+      const vocabulary = result[VOCABULARY_KEY].filter(item => item.word.toLowerCase() !== lowerWord);
+      chrome.storage.local.set({ [VOCABULARY_KEY]: vocabulary }, () => {
+        resolve(vocabulary);
+      });
+    });
+  });
+}
+
+async function updateVocabularyNotes(id, notes) {
+  return new Promise((resolve) => {
+    chrome.storage.local.get({ [VOCABULARY_KEY]: [] }, (result) => {
+      const vocabulary = result[VOCABULARY_KEY];
+      const index = vocabulary.findIndex(item => item.id === id);
+      
+      if (index >= 0) {
+        vocabulary[index].notes = notes;
+        vocabulary[index].updatedAt = Date.now();
+      }
+      
+      chrome.storage.local.set({ [VOCABULARY_KEY]: vocabulary }, () => {
+        resolve(vocabulary);
+      });
+    });
+  });
+}
+
+async function isWordInVocabulary(word) {
+  const vocabulary = await getVocabulary();
+  return vocabulary.some(item => item.word.toLowerCase() === word.toLowerCase());
+}
+
+async function getExcludeWords() {
+  return new Promise((resolve) => {
+    chrome.storage.local.get({ [EXCLUDE_WORDS_KEY]: [] }, (result) => {
+      resolve(result[EXCLUDE_WORDS_KEY]);
+    });
+  });
+}
+
+async function addExcludeWord(word) {
+  return new Promise((resolve) => {
+    chrome.storage.local.get({ [EXCLUDE_WORDS_KEY]: [] }, (result) => {
+      const excludeWords = result[EXCLUDE_WORDS_KEY];
+      const lowerWord = word.toLowerCase();
+      
+      if (!excludeWords.includes(lowerWord)) {
+        excludeWords.push(lowerWord);
+      }
+      
+      chrome.storage.local.set({ [EXCLUDE_WORDS_KEY]: excludeWords }, () => {
+        resolve(excludeWords);
+      });
+    });
+  });
+}
+
+async function removeExcludeWord(word) {
+  return new Promise((resolve) => {
+    chrome.storage.local.get({ [EXCLUDE_WORDS_KEY]: [] }, (result) => {
+      const lowerWord = word.toLowerCase();
+      const excludeWords = result[EXCLUDE_WORDS_KEY].filter(w => w !== lowerWord);
+      chrome.storage.local.set({ [EXCLUDE_WORDS_KEY]: excludeWords }, () => {
+        resolve(excludeWords);
+      });
+    });
+  });
+}
+
+async function isWordExcluded(word) {
+  const excludeWords = await getExcludeWords();
+  return excludeWords.includes(word.toLowerCase());
+}
+
+async function getCustomTranslations() {
+  return new Promise((resolve) => {
+    chrome.storage.local.get({ [CUSTOM_TRANSLATIONS_KEY]: {} }, (result) => {
+      resolve(result[CUSTOM_TRANSLATIONS_KEY]);
+    });
+  });
+}
+
+async function addCustomTranslation(original, customTranslation, from, to) {
+  return new Promise((resolve) => {
+    chrome.storage.local.get({ [CUSTOM_TRANSLATIONS_KEY]: {} }, (result) => {
+      const customTranslations = result[CUSTOM_TRANSLATIONS_KEY];
+      const key = `${from}|${to}|${original.toLowerCase()}`;
+      
+      customTranslations[key] = {
+        original,
+        customTranslation,
+        from,
+        to,
+        createdAt: Date.now()
+      };
+      
+      chrome.storage.local.set({ [CUSTOM_TRANSLATIONS_KEY]: customTranslations }, () => {
+        resolve(customTranslations);
+      });
+    });
+  });
+}
+
+async function getCustomTranslation(original, from, to) {
+  const customTranslations = await getCustomTranslations();
+  const key = `${from}|${to}|${original.toLowerCase()}`;
+  return customTranslations[key]?.customTranslation || null;
+}

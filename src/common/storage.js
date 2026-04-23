@@ -1,7 +1,10 @@
 const STORAGE_KEYS = {
   SETTINGS: 'translator_settings',
   TRANSLATION_HISTORY: 'translation_history',
-  CUSTOM_STYLES: 'custom_styles'
+  CUSTOM_STYLES: 'custom_styles',
+  VOCABULARY: 'translator_vocabulary',
+  EXCLUDE_WORDS: 'translator_exclude_words',
+  CUSTOM_TRANSLATIONS: 'translator_custom_translations'
 };
 
 const DEFAULT_SETTINGS = {
@@ -162,4 +165,184 @@ function generateStyleString(style) {
   }
   
   return cssText;
+}
+
+async function getVocabulary() {
+  return new Promise((resolve) => {
+    chrome.storage.local.get({ [STORAGE_KEYS.VOCABULARY]: [] }, (result) => {
+      resolve(result[STORAGE_KEYS.VOCABULARY]);
+    });
+  });
+}
+
+async function addToVocabulary(word, translation, from, to, notes = '') {
+  return new Promise((resolve) => {
+    chrome.storage.local.get({ [STORAGE_KEYS.VOCABULARY]: [] }, (result) => {
+      const vocabulary = result[STORAGE_KEYS.VOCABULARY];
+      
+      const existingIndex = vocabulary.findIndex(item => item.word.toLowerCase() === word.toLowerCase());
+      
+      if (existingIndex >= 0) {
+        vocabulary[existingIndex] = {
+          ...vocabulary[existingIndex],
+          translation,
+          from,
+          to,
+          notes,
+          updatedAt: Date.now()
+        };
+      } else {
+        vocabulary.unshift({
+          id: 'vocab-' + Date.now(),
+          word,
+          translation,
+          from,
+          to,
+          notes,
+          createdAt: Date.now(),
+          updatedAt: Date.now()
+        });
+      }
+      
+      if (vocabulary.length > 500) {
+        vocabulary.pop();
+      }
+      
+      chrome.storage.local.set({ [STORAGE_KEYS.VOCABULARY]: vocabulary }, () => {
+        resolve(vocabulary);
+      });
+    });
+  });
+}
+
+async function removeFromVocabulary(id) {
+  return new Promise((resolve) => {
+    chrome.storage.local.get({ [STORAGE_KEYS.VOCABULARY]: [] }, (result) => {
+      const vocabulary = result[STORAGE_KEYS.VOCABULARY].filter(item => item.id !== id);
+      chrome.storage.local.set({ [STORAGE_KEYS.VOCABULARY]: vocabulary }, () => {
+        resolve(vocabulary);
+      });
+    });
+  });
+}
+
+async function updateVocabularyNotes(id, notes) {
+  return new Promise((resolve) => {
+    chrome.storage.local.get({ [STORAGE_KEYS.VOCABULARY]: [] }, (result) => {
+      const vocabulary = result[STORAGE_KEYS.VOCABULARY];
+      const index = vocabulary.findIndex(item => item.id === id);
+      
+      if (index >= 0) {
+        vocabulary[index].notes = notes;
+        vocabulary[index].updatedAt = Date.now();
+      }
+      
+      chrome.storage.local.set({ [STORAGE_KEYS.VOCABULARY]: vocabulary }, () => {
+        resolve(vocabulary);
+      });
+    });
+  });
+}
+
+async function clearVocabulary() {
+  return new Promise((resolve) => {
+    chrome.storage.local.set({ [STORAGE_KEYS.VOCABULARY]: [] }, resolve);
+  });
+}
+
+async function isWordInVocabulary(word) {
+  const vocabulary = await getVocabulary();
+  return vocabulary.some(item => item.word.toLowerCase() === word.toLowerCase());
+}
+
+async function getExcludeWords() {
+  return new Promise((resolve) => {
+    chrome.storage.local.get({ [STORAGE_KEYS.EXCLUDE_WORDS]: [] }, (result) => {
+      resolve(result[STORAGE_KEYS.EXCLUDE_WORDS]);
+    });
+  });
+}
+
+async function addExcludeWord(word) {
+  return new Promise((resolve) => {
+    chrome.storage.local.get({ [STORAGE_KEYS.EXCLUDE_WORDS]: [] }, (result) => {
+      const excludeWords = result[STORAGE_KEYS.EXCLUDE_WORDS];
+      const lowerWord = word.toLowerCase();
+      
+      if (!excludeWords.includes(lowerWord)) {
+        excludeWords.push(lowerWord);
+      }
+      
+      chrome.storage.local.set({ [STORAGE_KEYS.EXCLUDE_WORDS]: excludeWords }, () => {
+        resolve(excludeWords);
+      });
+    });
+  });
+}
+
+async function removeExcludeWord(word) {
+  return new Promise((resolve) => {
+    chrome.storage.local.get({ [STORAGE_KEYS.EXCLUDE_WORDS]: [] }, (result) => {
+      const lowerWord = word.toLowerCase();
+      const excludeWords = result[STORAGE_KEYS.EXCLUDE_WORDS].filter(w => w !== lowerWord);
+      chrome.storage.local.set({ [STORAGE_KEYS.EXCLUDE_WORDS]: excludeWords }, () => {
+        resolve(excludeWords);
+      });
+    });
+  });
+}
+
+async function isWordExcluded(word) {
+  const excludeWords = await getExcludeWords();
+  return excludeWords.includes(word.toLowerCase());
+}
+
+async function getCustomTranslations() {
+  return new Promise((resolve) => {
+    chrome.storage.local.get({ [STORAGE_KEYS.CUSTOM_TRANSLATIONS]: {} }, (result) => {
+      resolve(result[STORAGE_KEYS.CUSTOM_TRANSLATIONS]);
+    });
+  });
+}
+
+async function addCustomTranslation(original, customTranslation, from, to) {
+  return new Promise((resolve) => {
+    chrome.storage.local.get({ [STORAGE_KEYS.CUSTOM_TRANSLATIONS]: {} }, (result) => {
+      const customTranslations = result[STORAGE_KEYS.CUSTOM_TRANSLATIONS];
+      const key = `${from}|${to}|${original.toLowerCase()}`;
+      
+      customTranslations[key] = {
+        original,
+        customTranslation,
+        from,
+        to,
+        createdAt: Date.now()
+      };
+      
+      chrome.storage.local.set({ [STORAGE_KEYS.CUSTOM_TRANSLATIONS]: customTranslations }, () => {
+        resolve(customTranslations);
+      });
+    });
+  });
+}
+
+async function getCustomTranslation(original, from, to) {
+  const customTranslations = await getCustomTranslations();
+  const key = `${from}|${to}|${original.toLowerCase()}`;
+  return customTranslations[key]?.customTranslation || null;
+}
+
+async function removeCustomTranslation(original, from, to) {
+  return new Promise((resolve) => {
+    chrome.storage.local.get({ [STORAGE_KEYS.CUSTOM_TRANSLATIONS]: {} }, (result) => {
+      const customTranslations = result[STORAGE_KEYS.CUSTOM_TRANSLATIONS];
+      const key = `${from}|${to}|${original.toLowerCase()}`;
+      
+      delete customTranslations[key];
+      
+      chrome.storage.local.set({ [STORAGE_KEYS.CUSTOM_TRANSLATIONS]: customTranslations }, () => {
+        resolve(customTranslations);
+      });
+    });
+  });
 }

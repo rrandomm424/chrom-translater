@@ -41,12 +41,15 @@
   ]);
   
   let pageLoadComplete = false;
+  let currentSelectionInfo = null;
+  let selectionDebounceTimer = null;
   
   init();
   
   async function init() {
     await loadSettings();
     setupMessageListeners();
+    setupSelectionListener();
     
     if (currentSettings.enabled) {
       setupMutationObserver();
@@ -56,6 +59,409 @@
         translatePage();
       }, 1000);
     }
+  }
+  
+  function setupSelectionListener() {
+    document.addEventListener('mouseup', handleMouseUp);
+    document.addEventListener('keyup', handleKeyUp);
+  }
+  
+  function handleMouseUp(event) {
+    if (event.target.closest('#translator-extension-popup')) {
+      return;
+    }
+    
+    clearTimeout(selectionDebounceTimer);
+    selectionDebounceTimer = setTimeout(() => {
+      const selection = window.getSelection();
+      const text = selection.toString().trim();
+      
+      if (text && text.length > 0 && isValidTranslationText(text)) {
+        handleTextSelection(text, selection);
+      } else if (!text) {
+        hideTranslationPopup();
+      }
+    }, 200);
+  }
+  
+  function handleKeyUp(event) {
+    if (event.key === 'Escape') {
+      hideTranslationPopup();
+    }
+  }
+  
+  function hideTranslationPopup() {
+    const popup = document.getElementById('translator-extension-popup');
+    if (popup) {
+      popup.remove();
+    }
+    currentSelectionInfo = null;
+  }
+  
+  async function handleTextSelection(text, selection) {
+    if (!currentSettings.enabled) return;
+    
+    const detectedLang = detectLanguage(text);
+    let targetLang = currentSettings.defaultTo;
+    
+    if (targetLang === 'auto') {
+      targetLang = detectedLang === 'zh' ? 'en' : 'zh';
+    }
+    
+    if (detectedLang === targetLang) {
+      return;
+    }
+    
+    currentSelectionInfo = {
+      original: text,
+      from: detectedLang,
+      to: targetLang,
+      selection: selection
+    };
+    
+    showTranslationPopupWithLoading();
+    
+    const customTranslation = await getCustomTranslationFromBackground(text, detectedLang, targetLang);
+    const isExcluded = await checkWordExcluded(text);
+    
+    if (isExcluded) {
+      hideTranslationPopup();
+      return;
+    }
+    
+    let translatedText = customTranslation;
+    if (!translatedText) {
+      translatedText = await sendTranslationRequest(text, detectedLang, targetLang);
+    }
+    
+    if (translatedText) {
+      currentSelectionInfo.translation = translatedText;
+      showTranslationPopupEnhanced(translatedText, customTranslation !== null);
+    } else {
+      hideTranslationPopup();
+    }
+  }
+  
+  async function getCustomTranslationFromBackground(text, from, to) {
+    return new Promise((resolve) => {
+      chrome.runtime.sendMessage(
+        { action: 'get-custom-translation', text, from, to },
+        (response) => {
+          if (response && response.success) {
+            resolve(response.customTranslation);
+          } else {
+            resolve(null);
+          }
+        }
+      );
+    });
+  }
+  
+  async function checkWordExcluded(word) {
+    return new Promise((resolve) => {
+      chrome.runtime.sendMessage(
+        { action: 'is-word-excluded', word },
+        (response) => {
+          if (response && response.success) {
+            resolve(response.excluded);
+          } else {
+            resolve(false);
+          }
+        }
+      );
+    });
+  }
+  
+  function showTranslationPopupWithLoading() {
+    const existingPopup = document.getElementById('translator-extension-popup');
+    if (existingPopup) {
+      existingPopup.remove();
+    }
+    
+    const popup = document.createElement('div');
+    popup.id = 'translator-extension-popup';
+    popup.className = 'translator-extension-popup';
+    
+    popup.innerHTML = `
+      <div class="translator-extension-popup-header">
+        <span>翻译中...</span>
+        <button class="translator-extension-close-btn">×</button>
+      </div>
+      <div class="translator-extension-popup-content translator-extension-loading"></div>
+    `;
+    
+    positionPopup(popup);
+    
+    const closeBtn = popup.querySelector('.translator-extension-close-btn');
+    closeBtn.onclick = () => hideTranslationPopup();
+    
+    document.body.appendChild(popup);
+  }
+  
+  function positionPopup(popup) {
+    const selection = window.getSelection();
+    if (selection.rangeCount > 0) {
+      const range = selection.getRangeAt(0);
+      const rect = range.getBoundingClientRect();
+      
+      popup.style.position = 'fixed';
+      popup.style.left = `${rect.left}px`;
+      popup.style.top = `${rect.bottom + 10}px`;
+      popup.style.zIndex = '999999';
+      
+      setTimeout(() => {
+        const popupRect = popup.getBoundingClientRect();
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
+        
+        if (popupRect.right > viewportWidth - 20) {
+          popup.style.left = `${viewportWidth - popupRect.width - 20}px`;
+        }
+        
+        if (popupRect.bottom > viewportHeight - 20) {
+          popup.style.top = `${rect.top - popupRect.height - 10}px`;
+        }
+      }, 0);
+    }
+  }
+  
+  async function showTranslationPopupEnhanced(translatedText, isCustom = false) {
+    const existingPopup = document.getElementById('translator-extension-popup');
+    if (existingPopup) {
+      existingPopup.remove();
+    }
+    
+    if (!currentSelectionInfo) return;
+    
+    const popup = document.createElement('div');
+    popup.id = 'translator-extension-popup';
+    popup.className = 'translator-extension-popup';
+    
+    const isInVocab = await checkWordInVocabulary(currentSelectionInfo.original);
+    
+    const styleString = generateStyleString(currentSettings.style);
+    const customBadge = isCustom ? '<span class="translator-extension-custom-badge">自定义</span>' : '';
+    const favIcon = isInVocab ? '★' : '☆';
+    const favClass = isInVocab ? 'active' : '';
+    
+    popup.innerHTML = `
+      <div class="translator-extension-popup-header">
+        <div class="translator-extension-popup-title">
+          <span>翻译结果</span>
+          ${customBadge}
+        </div>
+        <button class="translator-extension-close-btn">×</button>
+      </div>
+      <div class="translator-extension-popup-original">
+        <span class="translator-extension-label">原文:</span>
+        <span class="translator-extension-original-text">${escapeHtml(currentSelectionInfo.original)}</span>
+        <span class="translator-extension-lang">(${currentSelectionInfo.from === 'zh' ? '中文' : 'English'})</span>
+      </div>
+      <div class="translator-extension-popup-divider"></div>
+      <div class="translator-extension-popup-translation">
+        <span class="translator-extension-label">译文:</span>
+        <div class="translator-extension-translation-text" style="${styleString}">${escapeHtml(translatedText)}</div>
+      </div>
+      <div class="translator-extension-popup-divider"></div>
+      <div class="translator-extension-popup-actions">
+        <button class="translator-extension-action-btn translator-extension-fav-btn ${favClass}" data-action="favorite" title="收藏到词库">
+          <span class="translator-extension-action-icon">${favIcon}</span>
+          <span>收藏</span>
+        </button>
+        <button class="translator-extension-action-btn" data-action="exclude" title="不翻译此单词">
+          <span class="translator-extension-action-icon">🚫</span>
+          <span>不翻译</span>
+        </button>
+        <button class="translator-extension-action-btn" data-action="custom" title="自定义翻译结果">
+          <span class="translator-extension-action-icon">✏️</span>
+          <span>自定义</span>
+        </button>
+      </div>
+      <div class="translator-extension-custom-editor" style="display: none;">
+        <textarea class="translator-extension-custom-input" placeholder="输入自定义翻译结果...">${escapeHtml(translatedText)}</textarea>
+        <div class="translator-extension-custom-actions">
+          <button class="translator-extension-custom-save">保存</button>
+          <button class="translator-extension-custom-cancel">取消</button>
+        </div>
+      </div>
+    `;
+    
+    positionPopup(popup);
+    
+    const closeBtn = popup.querySelector('.translator-extension-close-btn');
+    closeBtn.onclick = () => hideTranslationPopup();
+    
+    const actionBtns = popup.querySelectorAll('.translator-extension-action-btn');
+    actionBtns.forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        const action = e.currentTarget.dataset.action;
+        await handlePopupAction(action, popup);
+      });
+    });
+    
+    const customEditor = popup.querySelector('.translator-extension-custom-editor');
+    const customInput = popup.querySelector('.translator-extension-custom-input');
+    const saveBtn = popup.querySelector('.translator-extension-custom-save');
+    const cancelBtn = popup.querySelector('.translator-extension-custom-cancel');
+    
+    saveBtn.addEventListener('click', async () => {
+      const customText = customInput.value.trim();
+      if (customText && currentSelectionInfo) {
+        await saveCustomTranslation(customText);
+        showTranslationPopupEnhanced(customText, true);
+      }
+    });
+    
+    cancelBtn.addEventListener('click', () => {
+      customEditor.style.display = 'none';
+    });
+    
+    document.body.appendChild(popup);
+    
+    setupPopupCloseListener(popup);
+  }
+  
+  function setupPopupCloseListener(popup) {
+    setTimeout(() => {
+      document.addEventListener('click', function closePopup(e) {
+        if (!popup.contains(e.target)) {
+          if (popup.parentNode) {
+            popup.remove();
+          }
+          document.removeEventListener('click', closePopup);
+        }
+      });
+    }, 100);
+  }
+  
+  async function handlePopupAction(action, popup) {
+    if (!currentSelectionInfo) return;
+    
+    switch (action) {
+      case 'favorite':
+        await toggleFavorite(popup);
+        break;
+      case 'exclude':
+        await excludeCurrentWord();
+        break;
+      case 'custom':
+        showCustomEditor(popup);
+        break;
+    }
+  }
+  
+  async function toggleFavorite(popup) {
+    if (!currentSelectionInfo) return;
+    
+    const { original, translation, from, to } = currentSelectionInfo;
+    const isInVocab = await checkWordInVocabulary(original);
+    
+    if (isInVocab) {
+      await removeFromVocabularyBackground(original);
+    } else {
+      await addToVocabularyBackground(original, translation, from, to);
+    }
+    
+    const newIsInVocab = await checkWordInVocabulary(original);
+    const favBtn = popup.querySelector('.translator-extension-fav-btn');
+    const favIcon = favBtn.querySelector('.translator-extension-action-icon');
+    
+    if (newIsInVocab) {
+      favBtn.classList.add('active');
+      favIcon.textContent = '★';
+    } else {
+      favBtn.classList.remove('active');
+      favIcon.textContent = '☆';
+    }
+  }
+  
+  async function checkWordInVocabulary(word) {
+    return new Promise((resolve) => {
+      chrome.runtime.sendMessage(
+        { action: 'is-word-in-vocabulary', word },
+        (response) => {
+          if (response && response.success) {
+            resolve(response.inVocabulary);
+          } else {
+            resolve(false);
+          }
+        }
+      );
+    });
+  }
+  
+  async function addToVocabularyBackground(word, translation, from, to) {
+    return new Promise((resolve) => {
+      chrome.runtime.sendMessage(
+        { action: 'add-to-vocabulary', word, translation, from, to },
+        (response) => {
+          resolve(response && response.success);
+        }
+      );
+    });
+  }
+  
+  async function removeFromVocabularyBackground(word) {
+    return new Promise((resolve) => {
+      chrome.runtime.sendMessage(
+        { action: 'remove-from-vocabulary', word },
+        (response) => {
+          resolve(response && response.success);
+        }
+      );
+    });
+  }
+  
+  async function excludeCurrentWord() {
+    if (!currentSelectionInfo) return;
+    
+    await new Promise((resolve) => {
+      chrome.runtime.sendMessage(
+        { action: 'add-exclude-word', word: currentSelectionInfo.original },
+        () => {
+          resolve();
+        }
+      );
+    });
+    
+    hideTranslationPopup();
+  }
+  
+  async function saveCustomTranslation(customText) {
+    if (!currentSelectionInfo) return;
+    
+    await new Promise((resolve) => {
+      chrome.runtime.sendMessage(
+        { 
+          action: 'add-custom-translation', 
+          original: currentSelectionInfo.original,
+          customTranslation: customText,
+          from: currentSelectionInfo.from,
+          to: currentSelectionInfo.to
+        },
+        () => {
+          resolve();
+        }
+      );
+    });
+  }
+  
+  function showCustomEditor(popup) {
+    const customEditor = popup.querySelector('.translator-extension-custom-editor');
+    if (customEditor) {
+      customEditor.style.display = 'block';
+      const input = customEditor.querySelector('.translator-extension-custom-input');
+      if (input) {
+        input.focus();
+        input.select();
+      }
+    }
+  }
+  
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
   }
   
   async function loadSettings() {

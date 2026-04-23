@@ -120,6 +120,12 @@
       openOptions.removeEventListener('click', handleOpenOptions);
       openOptions.addEventListener('click', handleOpenOptions);
     }
+    
+    const openVocabulary = document.getElementById('openVocabulary');
+    if (openVocabulary) {
+      openVocabulary.removeEventListener('click', handleOpenVocabulary);
+      openVocabulary.addEventListener('click', handleOpenVocabulary);
+    }
   }
   
   function updateUIFromSettings() {
@@ -334,6 +340,11 @@
   function handleOpenOptions(event) {
     event.preventDefault();
     chrome.runtime.openOptionsPage();
+  }
+  
+  function handleOpenVocabulary(event) {
+    event.preventDefault();
+    chrome.tabs.create({ url: chrome.runtime.getURL('vocabulary/vocabulary.html') });
   }
   
   async function saveSettings() {
